@@ -12,8 +12,9 @@
     <!-- Lien Manifeste PWA (sera injecté dynamiquement via Blob) -->
     <link id="pwa-manifest" rel="manifest">
     
-    <!-- Favicon Emoji ⏰ intégré -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='74' font-size='72' text-anchor='middle'%3E%E2%8F%B0%3C/text%3E%3C/svg%3E">
+    <!-- Favicon & Apple Touch Icon (générés dynamiquement en PNG via Canvas pour l'emoji ⏰) -->
+    <link id="favicon-link" rel="icon" type="image/png" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='74' font-size='72' text-anchor='middle'%3E%E2%8F%B0%3C/text%3E%3C/svg%3E">
+    <link id="apple-icon-link" rel="apple-touch-icon">
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -96,8 +97,6 @@
             border: 1px solid rgba(30, 41, 59, 0.9);
         }
 
-        /* Transitions douces sur l'anneau SVG */
-        #progress-ring {
         /* Transitions douces sur l'anneau SVG (rotation gérée par attribut SVG) */
         #progress-ring {
             transition: stroke 0.4s ease;
@@ -114,6 +113,15 @@
     </style>
 </head>
 <body id="app-body" class="p-2.5 flex flex-col items-center justify-center transition-colors duration-300 overflow-hidden">
+
+    <!-- Indicateur affiché dans la fenêtre principale lorsque le minuteur est détaché en PiP -->
+    <div id="pip-placeholder" class="hidden w-[235px] py-6 px-3 rounded-xl glass-panel flex-col items-center justify-center text-center gap-2">
+        <span class="text-xl">⏰</span>
+        <p class="text-[11px] font-medium text-slate-200 leading-snug">Minuteur ouvert en mini-fenêtre flottante</p>
+        <button id="pip-restore-btn" type="button" class="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-[10px] font-semibold transition">
+            Rappeler ici
+        </button>
+    </div>
 
     <!-- Conteneur global ultra-compact ajusté strictement au contenu -->
     <div id="app-container" class="w-[235px] flex flex-col items-center gap-2">
@@ -137,6 +145,14 @@
                         <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
                     Installer
+                </button>
+
+                <!-- Bouton Mini-fenêtre flottante (Document Picture-in-Picture) -->
+                <button id="pip-toggle-btn" type="button" title="Détacher en mini-fenêtre flottante (toujours au-dessus)" class="p-1 rounded-md glass-panel hover:bg-slate-800/80 text-slate-300 hover:text-cyan-300 transition-all" aria-label="Mini-fenêtre flottante">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                        <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                        <rect x="11" y="11" width="9" height="7" rx="1" fill="currentColor" fill-opacity="0.35"></rect>
+                    </svg>
                 </button>
 
                 <!-- Bouton test / activation son -->
@@ -330,10 +346,64 @@
     <script>
         /**
          * ============================================================================
-         * 1. ARCHITECTURE PWA (Manifeste dynamique & Service Worker via Blob)
+         * 1. ARCHITECTURE PWA (Icônes PNG Canvas, Manifeste & Service Worker)
          * ============================================================================
          */
         (function initPWA() {
+            /**
+             * Génère une véritable image PNG (Data URL) via Canvas avec l'emoji ⏰
+             * sur un fond sombre arrondi (#090d16), indispensable pour Chrome/Linux PWA.
+             */
+            function renderEmojiPngIcon(size) {
+                const canvas = document.createElement('canvas');
+                canvas.width = size;
+                canvas.height = size;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return '';
+
+                // Fond arrondi sombre (#090d16)
+                const radius = Math.round(size * 0.22);
+                ctx.fillStyle = '#090d16';
+                ctx.beginPath();
+                ctx.moveTo(radius, 0);
+                ctx.lineTo(size - radius, 0);
+                ctx.quadraticCurveTo(size, 0, size, radius);
+                ctx.lineTo(size, size - radius);
+                ctx.quadraticCurveTo(size, size, size - radius, size);
+                ctx.lineTo(radius, size);
+                ctx.quadraticCurveTo(0, size, 0, size - radius);
+                ctx.lineTo(0, radius);
+                ctx.quadraticCurveTo(0, 0, radius, 0);
+                ctx.closePath();
+                ctx.fill();
+
+                // Bordure subtile cyan
+                ctx.strokeStyle = 'rgba(6, 182, 212, 0.35)';
+                ctx.lineWidth = Math.max(1.5, size * 0.025);
+                ctx.stroke();
+
+                // Dessin centré de l'emoji ⏰
+                const fontSize = Math.round(size * 0.66);
+                ctx.font = `${fontSize}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('⏰', size / 2, size / 2 + size * 0.04);
+
+                return canvas.toDataURL('image/png');
+            }
+
+            const icon64Png = renderEmojiPngIcon(64);
+            const icon192Png = renderEmojiPngIcon(192);
+            const icon512Png = renderEmojiPngIcon(512);
+
+            // Mise à jour immédiate de la favicon et de l'icône Apple Touch en PNG réel
+            if (icon64Png) {
+                document.getElementById('favicon-link').setAttribute('href', icon64Png);
+            }
+            if (icon192Png) {
+                document.getElementById('apple-icon-link').setAttribute('href', icon192Png);
+            }
+
             // Ajustement automatique de la fenêtre desktop lorsque lancée en mode PWA installée
             function fitWindowToContent() {
                 const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
@@ -360,11 +430,7 @@
                 });
             });
 
-            // Génération de l'icône SVG avec l'emoji ⏰ en Data URI pour le manifeste
-            const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#0b0f19"/><text x="256" y="365" font-size="330" text-anchor="middle">⏰</text></svg>`;
-            const iconDataUri = 'data:image/svg+xml;utf8,' + encodeURIComponent(iconSvg);
-
-            // Création du manifeste Web App
+            // Création du manifeste Web App avec icônes PNG réelles
             const manifest = {
                 name: 'Minuteur Dark PWA',
                 short_name: 'Minuteur',
@@ -376,15 +442,15 @@
                 orientation: 'portrait',
                 icons: [
                     {
-                        src: iconDataUri,
+                        src: icon192Png,
                         sizes: '192x192',
-                        type: 'image/svg+xml',
+                        type: 'image/png',
                         purpose: 'any maskable'
                     },
                     {
-                        src: iconDataUri,
+                        src: icon512Png,
                         sizes: '512x512',
-                        type: 'image/svg+xml',
+                        type: 'image/png',
                         purpose: 'any maskable'
                     }
                 ]
@@ -539,6 +605,10 @@
 
             // Éléments DOM
             const appBody = document.getElementById('app-body');
+            const appContainer = document.getElementById('app-container');
+            const pipPlaceholder = document.getElementById('pip-placeholder');
+            const pipToggleBtn = document.getElementById('pip-toggle-btn');
+            const pipRestoreBtn = document.getElementById('pip-restore-btn');
             const timeDisplay = document.getElementById('time-display');
             const timeDisplayBtn = document.getElementById('time-display-btn');
             const statusBadge = document.getElementById('status-badge');
@@ -562,6 +632,113 @@
             const inputSec = document.getElementById('input-sec');
             const modalCancel = document.getElementById('modal-cancel');
             const modalConfirm = document.getElementById('modal-confirm');
+
+            // Référence vers la fenêtre Document Picture-in-Picture active
+            let pipWindow = null;
+
+            /**
+             * ============================================================================
+             * GESTION DE L'API DOCUMENT PICTURE-IN-PICTURE (Mini-fenêtre flottante)
+             * ============================================================================
+             */
+            function syncAlarmClassToPip() {
+                if (!pipWindow || pipWindow.closed) return;
+                if (isFinished) {
+                    pipWindow.document.body.classList.add('alarm-active-bg');
+                } else {
+                    pipWindow.document.body.classList.remove('alarm-active-bg');
+                }
+            }
+
+            function restoreFromPip() {
+                if (pipWindow && !pipWindow.closed) {
+                    pipWindow.close();
+                }
+                pipWindow = null;
+
+                // Réintégration propre du minuteur et de la modale dans la fenêtre principale
+                if (appContainer.parentElement !== appBody) {
+                    appBody.appendChild(appContainer);
+                }
+                if (editModal.parentElement !== appBody) {
+                    appBody.appendChild(editModal);
+                }
+                pipPlaceholder.classList.add('hidden');
+                pipPlaceholder.classList.remove('flex');
+                pipToggleBtn.classList.remove('text-cyan-400', 'border-cyan-500/50');
+            }
+
+            async function toggleDocumentPiP() {
+                // Si déjà ouvert en PiP, on le ferme et rapatrie l'interface
+                if (pipWindow && !pipWindow.closed) {
+                    restoreFromPip();
+                    return;
+                }
+
+                // Vérification du support de l'API Document Picture-in-Picture
+                if ('documentPictureInPicture' in window) {
+                    try {
+                        pipWindow = await window.documentPictureInPicture.requestWindow({
+                            width: 255,
+                            height: 345,
+                        });
+
+                        // Copie de toutes les feuilles de style et balises <style>/<script> Tailwind dans la fenêtre PiP
+                        [...document.styleSheets].forEach((styleSheet) => {
+                            try {
+                                const cssRules = [...styleSheet.cssRules].map((rule) => rule.cssText).join('');
+                                const style = document.createElement('style');
+                                style.textContent = cssRules;
+                                pipWindow.document.head.appendChild(style);
+                            } catch (e) {
+                                if (styleSheet.href) {
+                                    const link = document.createElement('link');
+                                    link.rel = 'stylesheet';
+                                    link.href = styleSheet.href;
+                                    pipWindow.document.head.appendChild(link);
+                                }
+                            }
+                        });
+
+                        // Copie des styles inline et configuration Tailwind
+                        document.querySelectorAll('style').forEach((styleEl) => {
+                            pipWindow.document.head.appendChild(styleEl.cloneNode(true));
+                        });
+
+                        // Configuration du body de la fenêtre PiP
+                        pipWindow.document.documentElement.className = 'dark';
+                        pipWindow.document.body.className = 'p-2.5 flex flex-col items-center justify-center transition-colors duration-300 overflow-hidden bg-[#0b0f19] text-slate-50';
+                        pipWindow.document.title = 'Minuteur ⏰';
+
+                        // Déplacement en direct du conteneur DOM et de la modale dans la fenêtre flottante
+                        pipWindow.document.body.appendChild(appContainer);
+                        pipWindow.document.body.appendChild(editModal);
+
+                        // Affichage de l'état détaché dans la fenêtre parente
+                        pipPlaceholder.classList.remove('hidden');
+                        pipPlaceholder.classList.add('flex');
+                        pipToggleBtn.classList.add('text-cyan-400', 'border-cyan-500/50');
+                        syncAlarmClassToPip();
+
+                        // Raccourcis clavier également actifs dans la fenêtre PiP
+                        pipWindow.addEventListener('keydown', handleGlobalKeydown);
+
+                        // Rapatriement automatique lorsque l'utilisateur ferme la fenêtre flottante
+                        pipWindow.addEventListener('pagehide', () => {
+                            restoreFromPip();
+                        });
+                    } catch (err) {
+                        console.warn('Échec ouverture Document PiP, repli popup :', err);
+                        window.open(location.href, 'MinuteurMini', 'width=260,height=360,menubar=no,toolbar=no,location=no,status=no');
+                    }
+                } else {
+                    // Fallback popup compacte si le navigateur ne supporte pas Document PiP
+                    window.open(location.href, 'MinuteurMini', 'width=260,height=360,menubar=no,toolbar=no,location=no,status=no');
+                }
+            }
+
+            pipToggleBtn.addEventListener('click', toggleDocumentPiP);
+            pipRestoreBtn.addEventListener('click', restoreFromPip);
 
             // Constantes géométriques du cercle SVG (viewBox 160x160, r = 70 => 2 * PI * 70 = 439.823)
             const RADIUS = 70;
@@ -665,6 +842,9 @@
                 isFinished = false;
                 beeper.stopAlarm();
                 appBody.classList.remove('alarm-active-bg');
+                if (pipWindow && !pipWindow.closed) {
+                    pipWindow.document.body.classList.remove('alarm-active-bg');
+                }
                 timeDisplay.classList.remove('alarm-active-text');
             }
 
@@ -681,6 +861,7 @@
                 statusBadge.className = 'text-[8px] font-bold uppercase tracking-widest text-rose-400 mb-0.5';
 
                 appBody.classList.add('alarm-active-bg');
+                syncAlarmClassToPip();
                 timeDisplay.classList.add('alarm-active-text');
 
                 updateVisuals();
@@ -871,7 +1052,7 @@
             });
 
             // Raccourcis clavier pratiques (Espace pour Start/Stop, R pour Réinit)
-            window.addEventListener('keydown', (e) => {
+            function handleGlobalKeydown(e) {
                 if (!editModal.classList.contains('hidden')) {
                     if (e.key === 'Escape') closeModal();
                     if (e.key === 'Enter') modalConfirm.click();
@@ -888,7 +1069,9 @@
                 } else if (e.key.toLowerCase() === 'r') {
                     resetTimer();
                 }
-            });
+            }
+
+            window.addEventListener('keydown', handleGlobalKeydown);
 
             // Initialisation visuelle
             updateVisuals();
