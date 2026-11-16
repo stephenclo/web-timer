@@ -9,10 +9,10 @@
     <meta name="apple-mobile-web-app-title" content="Minuteur">
     <title>Minuteur — PWA</title>
     
-    <!-- Lien Manifeste PWA (sera injecté dynamiquement via Blob) -->
+    <!-- Lien Manifeste PWA (injecté dynamiquement via Blob) -->
     <link id="pwa-manifest" rel="manifest">
     
-    <!-- Favicon & Apple Touch Icon (générés dynamiquement en PNG via Canvas pour l'emoji ⏰) -->
+    <!-- Favicon & Apple Touch Icon (générés dynamiquement en PNG haute résolution via Canvas pour l'emoji ⏰) -->
     <link id="favicon-link" rel="icon" type="image/png" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='74' font-size='72' text-anchor='middle'%3E%E2%8F%B0%3C/text%3E%3C/svg%3E">
     <link id="apple-icon-link" rel="apple-touch-icon">
 
@@ -44,7 +44,7 @@
     </script>
 
     <style>
-        /* Styles personnalisés pour la fluidité des animations et le clignotement d'alerte */
+        /* Styles de base et ergonomie */
         body {
             background-color: #0b0f19;
             color: #f8fafc;
@@ -56,7 +56,7 @@
             font-variant-numeric: tabular-nums;
         }
 
-        /* Animation de clignotement intense lorsque le minuteur arrive à 00:00 */
+        /* Animation de clignotement d'alerte lorsque le minuteur arrive à 00:00 */
         @keyframes alarmFlash {
             0%, 100% {
                 background-color: #0b0f19;
@@ -91,7 +91,7 @@
 
         /* Effet verre dépoli subtil */
         .glass-panel {
-            background: rgba(17, 24, 39, 0.75);
+            background: rgba(17, 24, 39, 0.78);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(30, 41, 59, 0.9);
@@ -102,7 +102,7 @@
             transition: stroke 0.4s ease;
         }
 
-        /* Ajustement strict au contenu pour la fenêtre PWA */
+        /* Ajustement strict au contenu en mode fenêtre standard / PWA */
         html, body {
             width: fit-content;
             height: fit-content;
@@ -110,12 +110,55 @@
             min-height: fit-content;
             margin: 0 auto;
         }
+
+        /* Mode Document Picture-in-Picture : suppression totale de l'espace vide */
+        html.is-pip, html.is-pip body {
+            width: 100% !important;
+            height: 100% !important;
+            min-width: 100% !important;
+            min-height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+        }
+
+        html.is-pip #app-card {
+            width: 100% !important;
+            height: 100% !important;
+            border-radius: 0 !important;
+            border: none !important;
+            padding: 6px 8px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            box-sizing: border-box !important;
+        }
+
+        html.is-pip #header-title-group {
+            display: none !important;
+        }
+
+        html.is-pip #app-header {
+            position: absolute;
+            top: 4px;
+            right: 6px;
+            width: auto !important;
+            z-index: 20;
+        }
+
+        html.is-pip #app-main {
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            width: 100%;
+        }
     </style>
 </head>
-<body id="app-body" class="p-2.5 flex flex-col items-center justify-center transition-colors duration-300 overflow-hidden">
+<body id="app-body" class="p-1.5 flex flex-col items-center justify-center transition-colors duration-300 overflow-hidden">
 
     <!-- Indicateur affiché dans la fenêtre principale lorsque le minuteur est détaché en PiP -->
-    <div id="pip-placeholder" class="hidden w-[235px] py-6 px-3 rounded-xl glass-panel flex-col items-center justify-center text-center gap-2">
+    <div id="pip-placeholder" class="hidden w-[230px] py-5 px-3 rounded-xl glass-panel flex-col items-center justify-center text-center gap-2">
         <span class="text-xl">⏰</span>
         <p class="text-[11px] font-medium text-slate-200 leading-snug">Minuteur ouvert en mini-fenêtre flottante</p>
         <button id="pip-restore-btn" type="button" class="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-[10px] font-semibold transition">
@@ -123,27 +166,30 @@
         </button>
     </div>
 
-    <!-- Conteneur global ultra-compact ajusté strictement au contenu -->
-    <div id="app-container" class="w-[235px] flex flex-col items-center gap-2">
+    <!-- Carte principale ultra-compacte (#app-card occupe 100% en mode PiP) -->
+    <div id="app-card" class="relative w-[228px] p-2 rounded-xl glass-panel flex flex-col items-center justify-between gap-1.5">
 
-        <!-- En-tête minimaliste & Statut PWA -->
-        <header class="w-full flex items-center justify-between">
-            <div>
+        <!-- En-tête minimaliste (texte masqué automatiquement en mode PiP) -->
+        <header id="app-header" class="w-full flex items-center justify-between">
+            <div id="header-title-group">
                 <h1 class="text-xs font-semibold tracking-tight text-slate-100 leading-none">Minuteur</h1>
                 <span id="pwa-status" class="text-[9px] text-slate-400 font-medium block mt-0.5">Prêt • Hors-ligne</span>
             </div>
 
-            <div class="flex items-center gap-1">
+            <div class="flex items-center gap-1 ml-auto">
                 <!-- Bouton Mini-fenêtre flottante (Document Picture-in-Picture) -->
-                <button id="pip-toggle-btn" type="button" title="Détacher en mini-fenêtre flottante (toujours au-dessus)" class="p-1 rounded-md glass-panel hover:bg-slate-800/80 text-slate-300 hover:text-cyan-300 transition-all" aria-label="Mini-fenêtre flottante">
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <button id="pip-toggle-btn" type="button" title="Détacher / Quitter la mini-fenêtre flottante" class="p-1 rounded-md bg-slate-800/70 hover:bg-slate-700/80 border border-slate-700/70 text-slate-300 hover:text-cyan-300 transition-all" aria-label="Mini-fenêtre flottante">
+                    <svg id="icon-pip-enter" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                         <rect x="2" y="4" width="20" height="16" rx="2"></rect>
                         <rect x="11" y="11" width="9" height="7" rx="1" fill="currentColor" fill-opacity="0.35"></rect>
+                    </svg>
+                    <svg id="icon-pip-exit" class="w-3 h-3 hidden text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 9L4 4m0 0v4m0-4h4M15 15l5 5m0 0v-4m0 4h-4" />
                     </svg>
                 </button>
 
                 <!-- Bouton test / activation son -->
-                <button id="sound-toggle-btn" title="Activer/Couper le bip sonore" class="p-1 rounded-md glass-panel hover:bg-slate-800/80 text-slate-300 transition-all" aria-label="Gestion du son">
+                <button id="sound-toggle-btn" title="Activer/Couper le bip sonore" class="p-1 rounded-md bg-slate-800/70 hover:bg-slate-700/80 border border-slate-700/70 text-slate-300 transition-all" aria-label="Gestion du son">
                     <svg id="icon-sound-on" class="w-3 h-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                         <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                         <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
@@ -158,11 +204,11 @@
             </div>
         </header>
 
-        <!-- Zone Centrale : Jauge Circulaire + Affichage Numérique -->
-        <main class="w-full flex flex-col items-center">
+        <!-- Zone Centrale : Jauge Circulaire + Contrôles -->
+        <main id="app-main" class="w-full flex flex-col items-center gap-1.5">
             
-            <!-- Conteneur du cercle SVG minimaliste (150px x 150px) -->
-            <div class="relative w-[150px] h-[150px] flex items-center justify-center">
+            <!-- Conteneur du cercle SVG minimaliste (122px x 122px) -->
+            <div class="relative w-[122px] h-[122px] flex items-center justify-center mx-auto">
                 <!-- Halo lumineux arrière-plan sans filtre SVG -->
                 <div id="glow-backdrop" class="absolute inset-2 rounded-full bg-cyan-500/10 blur-md transition-colors duration-500 pointer-events-none"></div>
 
@@ -198,7 +244,7 @@
                 <!-- Contenu central à l'intérieur du cercle -->
                 <div class="absolute inset-0 flex flex-col items-center justify-center">
                     <!-- Indicateur d'état -->
-                    <span id="status-badge" class="text-[8px] font-medium uppercase tracking-widest text-slate-400 mb-0.5">
+                    <span id="status-badge" class="text-[7.5px] font-medium uppercase tracking-widest text-slate-400 mb-0.5">
                         Prêt
                     </span>
 
@@ -207,25 +253,25 @@
                         id="time-display-btn" 
                         type="button"
                         title="Cliquez pour modifier la durée"
-                        class="group relative flex items-center justify-center px-1.5 py-0 rounded-lg hover:bg-slate-800/40 transition-colors focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
+                        class="group relative flex items-center justify-center px-1 py-0 rounded-lg hover:bg-slate-800/40 transition-colors focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
                     >
-                        <span id="time-display" class="font-mono text-[26px] font-bold tracking-tight text-slate-50 tabular-nums leading-none">
+                        <span id="time-display" class="font-mono text-[21px] font-bold tracking-tight text-slate-50 tabular-nums leading-none">
                             05:00
                         </span>
                     </button>
 
                     <!-- Contrôles fins +/- 10s / 1m ultra-compacts centrés sans toucher l'anneau -->
-                    <div id="fine-controls" class="flex items-center gap-0.5 mt-1">
-                        <button type="button" data-adjust="-60" class="adjust-btn px-1 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700/90 border border-slate-700/70 text-[7.5px] font-mono text-slate-300 leading-none transition active:scale-95">
+                    <div id="fine-controls" class="flex items-center gap-0.5 mt-0.5">
+                        <button type="button" data-adjust="-60" class="adjust-btn px-1 py-0.5 rounded bg-slate-800/85 hover:bg-slate-700/90 border border-slate-700/70 text-[6.5px] font-mono text-slate-300 leading-none transition active:scale-95">
                             -1m
                         </button>
-                        <button type="button" data-adjust="-10" class="adjust-btn px-1 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700/90 border border-slate-700/70 text-[7.5px] font-mono text-slate-300 leading-none transition active:scale-95">
+                        <button type="button" data-adjust="-10" class="adjust-btn px-1 py-0.5 rounded bg-slate-800/85 hover:bg-slate-700/90 border border-slate-700/70 text-[6.5px] font-mono text-slate-300 leading-none transition active:scale-95">
                             -10s
                         </button>
-                        <button type="button" data-adjust="10" class="adjust-btn px-1 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700/90 border border-slate-700/70 text-[7.5px] font-mono text-slate-300 leading-none transition active:scale-95">
+                        <button type="button" data-adjust="10" class="adjust-btn px-1 py-0.5 rounded bg-slate-800/85 hover:bg-slate-700/90 border border-slate-700/70 text-[6.5px] font-mono text-slate-300 leading-none transition active:scale-95">
                             +10s
                         </button>
-                        <button type="button" data-adjust="60" class="adjust-btn px-1 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700/90 border border-slate-700/70 text-[7.5px] font-mono text-slate-300 leading-none transition active:scale-95">
+                        <button type="button" data-adjust="60" class="adjust-btn px-1 py-0.5 rounded bg-slate-800/85 hover:bg-slate-700/90 border border-slate-700/70 text-[6.5px] font-mono text-slate-300 leading-none transition active:scale-95">
                             +1m
                         </button>
                     </div>
@@ -233,14 +279,14 @@
             </div>
 
             <!-- Boutons Principaux : Start, Stop, Réinit -->
-            <div class="w-full grid grid-cols-3 gap-1.5 mt-2">
+            <div class="w-full grid grid-cols-3 gap-1">
                 <!-- START -->
                 <button 
                     id="btn-start" 
                     type="button"
-                    class="py-1.5 px-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 active:scale-[0.98] text-slate-950 font-semibold text-[11px] shadow-sm shadow-cyan-500/20 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    class="py-1 px-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 active:scale-[0.98] text-slate-950 font-semibold text-[10.5px] shadow-sm shadow-cyan-500/20 transition-all flex items-center justify-center gap-1 cursor-pointer"
                 >
-                    <svg class="w-3 h-3 fill-current" viewBox="0 0 24 24">
+                    <svg class="w-2.5 h-2.5 fill-current" viewBox="0 0 24 24">
                         <polygon points="5 3 19 12 5 21 5 3"></polygon>
                     </svg>
                     <span>Start</span>
@@ -250,9 +296,9 @@
                 <button 
                     id="btn-stop" 
                     type="button"
-                    class="py-1.5 px-2 rounded-lg glass-panel hover:bg-slate-800/90 active:scale-[0.98] text-amber-400 border-amber-500/20 font-semibold text-[11px] transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    class="py-1 px-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/90 active:scale-[0.98] text-amber-400 border border-amber-500/25 font-semibold text-[10.5px] transition-all flex items-center justify-center gap-1 cursor-pointer"
                 >
-                    <svg class="w-3 h-3 fill-current" viewBox="0 0 24 24">
+                    <svg class="w-2.5 h-2.5 fill-current" viewBox="0 0 24 24">
                         <rect x="6" y="4" width="4" height="16" rx="1"></rect>
                         <rect x="14" y="4" width="4" height="16" rx="1"></rect>
                     </svg>
@@ -263,9 +309,9 @@
                 <button 
                     id="btn-reset" 
                     type="button"
-                    class="py-1.5 px-2 rounded-lg glass-panel hover:bg-slate-800/90 active:scale-[0.98] text-slate-300 font-semibold text-[11px] transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    class="py-1 px-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/90 active:scale-[0.98] text-slate-300 border border-slate-700/70 font-semibold text-[10.5px] transition-all flex items-center justify-center gap-1 cursor-pointer"
                 >
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3 3v5h5" />
                     </svg>
@@ -274,27 +320,27 @@
             </div>
 
             <!-- Présélections rapides (1, 2, 5, 10, 15 min) -->
-            <section class="w-full mt-2" aria-label="Durées prédéfinies">
+            <section class="w-full" aria-label="Durées prédéfinies">
                 <div class="grid grid-cols-5 gap-1">
-                    <button type="button" data-minutes="1" class="preset-btn py-1 rounded-lg glass-panel hover:border-cyan-500/50 hover:bg-slate-800/80 text-slate-200 font-medium text-[10px] transition-all active:scale-95 flex flex-col items-center justify-center">
-                        <span class="font-mono font-bold text-xs leading-tight">1</span>
-                        <span class="text-[8px] text-slate-400 leading-none">min</span>
+                    <button type="button" data-minutes="1" class="preset-btn py-0.5 rounded-md bg-slate-800/75 border border-slate-700/70 hover:border-cyan-500/50 hover:bg-slate-800 text-slate-200 font-medium text-[10px] transition-all active:scale-95 flex flex-col items-center justify-center">
+                        <span class="font-mono font-bold text-[10.5px] leading-tight">1</span>
+                        <span class="text-[7px] text-slate-400 leading-none">min</span>
                     </button>
-                    <button type="button" data-minutes="2" class="preset-btn py-1 rounded-lg glass-panel hover:border-cyan-500/50 hover:bg-slate-800/80 text-slate-200 font-medium text-[10px] transition-all active:scale-95 flex flex-col items-center justify-center">
-                        <span class="font-mono font-bold text-xs leading-tight">2</span>
-                        <span class="text-[8px] text-slate-400 leading-none">min</span>
+                    <button type="button" data-minutes="2" class="preset-btn py-0.5 rounded-md bg-slate-800/75 border border-slate-700/70 hover:border-cyan-500/50 hover:bg-slate-800 text-slate-200 font-medium text-[10px] transition-all active:scale-95 flex flex-col items-center justify-center">
+                        <span class="font-mono font-bold text-[10.5px] leading-tight">2</span>
+                        <span class="text-[7px] text-slate-400 leading-none">min</span>
                     </button>
-                    <button type="button" data-minutes="5" class="preset-btn py-1 rounded-lg border border-cyan-500/60 bg-cyan-500/10 text-cyan-300 font-medium text-[10px] transition-all active:scale-95 flex flex-col items-center justify-center">
-                        <span class="font-mono font-bold text-xs leading-tight">5</span>
-                        <span class="text-[8px] text-cyan-400/80 leading-none">min</span>
+                    <button type="button" data-minutes="5" class="preset-btn py-0.5 rounded-md border border-cyan-500/60 bg-cyan-500/15 text-cyan-300 font-medium text-[10px] transition-all active:scale-95 flex flex-col items-center justify-center">
+                        <span class="font-mono font-bold text-[10.5px] leading-tight">5</span>
+                        <span class="text-[7px] text-cyan-400/80 leading-none">min</span>
                     </button>
-                    <button type="button" data-minutes="10" class="preset-btn py-1 rounded-lg glass-panel hover:border-cyan-500/50 hover:bg-slate-800/80 text-slate-200 font-medium text-[10px] transition-all active:scale-95 flex flex-col items-center justify-center">
-                        <span class="font-mono font-bold text-xs leading-tight">10</span>
-                        <span class="text-[8px] text-slate-400 leading-none">min</span>
+                    <button type="button" data-minutes="10" class="preset-btn py-0.5 rounded-md bg-slate-800/75 border border-slate-700/70 hover:border-cyan-500/50 hover:bg-slate-800 text-slate-200 font-medium text-[10px] transition-all active:scale-95 flex flex-col items-center justify-center">
+                        <span class="font-mono font-bold text-[10.5px] leading-tight">10</span>
+                        <span class="text-[7px] text-slate-400 leading-none">min</span>
                     </button>
-                    <button type="button" data-minutes="15" class="preset-btn py-1 rounded-lg glass-panel hover:border-cyan-500/50 hover:bg-slate-800/80 text-slate-200 font-medium text-[10px] transition-all active:scale-95 flex flex-col items-center justify-center">
-                        <span class="font-mono font-bold text-xs leading-tight">15</span>
-                        <span class="text-[8px] text-slate-400 leading-none">min</span>
+                    <button type="button" data-minutes="15" class="preset-btn py-0.5 rounded-md bg-slate-800/75 border border-slate-700/70 hover:border-cyan-500/50 hover:bg-slate-800 text-slate-200 font-medium text-[10px] transition-all active:scale-95 flex flex-col items-center justify-center">
+                        <span class="font-mono font-bold text-[10.5px] leading-tight">15</span>
+                        <span class="text-[7px] text-slate-400 leading-none">min</span>
                     </button>
                 </div>
             </section>
@@ -303,11 +349,11 @@
 
     <!-- Modale d'édition manuelle du temps (compacte) -->
     <div id="edit-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/75 backdrop-blur-sm p-2">
-        <div class="w-full max-w-[215px] rounded-xl bg-slate-900 border border-slate-800 p-3 shadow-2xl">
+        <div class="w-full max-w-[210px] rounded-xl bg-slate-900 border border-slate-800 p-2.5 shadow-2xl">
             <h3 class="text-xs font-semibold text-slate-100 mb-0.5">Durée personnalisée</h3>
-            <p class="text-[10px] text-slate-400 mb-2.5">Minutes et secondes.</p>
+            <p class="text-[10px] text-slate-400 mb-2">Minutes et secondes.</p>
             
-            <div class="flex items-center justify-center gap-2 mb-3">
+            <div class="flex items-center justify-center gap-2 mb-2.5">
                 <div class="flex flex-col items-center">
                     <label for="input-min" class="text-[9px] text-slate-400 mb-0.5">Min</label>
                     <input id="input-min" type="number" min="0" max="180" value="5" class="w-14 py-1 text-center font-mono text-base font-bold rounded-lg bg-slate-950 border border-slate-700 text-slate-100 focus:border-cyan-500 focus:outline-none">
@@ -320,10 +366,10 @@
             </div>
 
             <div class="grid grid-cols-2 gap-1.5">
-                <button id="modal-cancel" type="button" class="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium transition">
+                <button id="modal-cancel" type="button" class="py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium transition">
                     Annuler
                 </button>
-                <button id="modal-confirm" type="button" class="py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-[11px] font-semibold transition">
+                <button id="modal-confirm" type="button" class="py-1 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-[11px] font-semibold transition">
                     Appliquer
                 </button>
             </div>
@@ -338,8 +384,8 @@
          */
         (function initPWA() {
             /**
-             * Génère une véritable image PNG (Data URL) via Canvas avec l'emoji ⏰
-             * sur un fond sombre arrondi (#090d16), indispensable pour Chrome/Linux PWA.
+             * Génère une image PNG haute résolution (Data URL) via Canvas avec l'emoji ⏰
+             * sur un fond sombre arrondi (#090d16).
              */
             function renderEmojiPngIcon(size) {
                 const canvas = document.createElement('canvas');
@@ -348,7 +394,6 @@
                 const ctx = canvas.getContext('2d');
                 if (!ctx) return '';
 
-                // Fond arrondi sombre (#090d16)
                 const radius = Math.round(size * 0.22);
                 ctx.fillStyle = '#090d16';
                 ctx.beginPath();
@@ -364,12 +409,10 @@
                 ctx.closePath();
                 ctx.fill();
 
-                // Bordure subtile cyan
                 ctx.strokeStyle = 'rgba(6, 182, 212, 0.35)';
                 ctx.lineWidth = Math.max(1.5, size * 0.025);
                 ctx.stroke();
 
-                // Dessin centré de l'emoji ⏰
                 const fontSize = Math.round(size * 0.66);
                 ctx.font = `${fontSize}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
                 ctx.textAlign = 'center';
@@ -383,7 +426,6 @@
             const icon192Png = renderEmojiPngIcon(192);
             const icon512Png = renderEmojiPngIcon(512);
 
-            // Mise à jour immédiate de la favicon et de l'icône Apple Touch en PNG réel
             if (icon64Png) {
                 document.getElementById('favicon-link').setAttribute('href', icon64Png);
             }
@@ -391,7 +433,7 @@
                 document.getElementById('apple-icon-link').setAttribute('href', icon192Png);
             }
 
-            // Ajustement automatique de la fenêtre desktop lorsque lancée en mode PWA installée
+            // Ajustement automatique de la fenêtre desktop en mode PWA installée
             function fitWindowToContent() {
                 const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
                 if (!isStandalone) return;
@@ -406,7 +448,7 @@
                         window.resizeTo(contentW + chromeW, contentH + chromeH);
                     }
                 } catch (e) {
-                    // Ignoré si le navigateur restreint resizeTo
+                    // Ignoré si restreint
                 }
             }
 
@@ -417,7 +459,7 @@
                 });
             });
 
-            // Création du manifeste Web App avec icônes PNG réelles
+            // Manifeste Web App
             const manifest = {
                 name: 'Minuteur Dark PWA',
                 short_name: 'Minuteur',
@@ -451,7 +493,7 @@
                 console.warn('Impossible de créer le manifeste Blob :', err);
             }
 
-            // Enregistrement du Service Worker via Blob (avec sécurité si exécuté en iframe sandboxée)
+            // Enregistrement du Service Worker hors-ligne
             const pwaStatusEl = document.getElementById('pwa-status');
             if ('serviceWorker' in navigator) {
                 const swCode = `
@@ -476,7 +518,6 @@
                             pwaStatusEl.textContent = 'PWA Active • Prêt hors-ligne';
                         })
                         .catch(() => {
-                            // Comportement normal dans certains environnements sandboxés / iframes
                             pwaStatusEl.textContent = 'Mode Web • Prêt';
                         });
                 } catch (e) {
@@ -487,7 +528,7 @@
 
         /**
          * ============================================================================
-         * 2. SYNTHÉTISEUR AUDIO WEB AUDIO API (Bip électronique sans fichier externe)
+         * 2. SYNTHÉTISEUR AUDIO WEB AUDIO API (Bip électronique 880 Hz)
          * ============================================================================
          */
         class Beeper {
@@ -497,7 +538,6 @@
                 this.alarmInterval = null;
             }
 
-            // Initialise ou débloque l'AudioContext lors d'une interaction utilisateur
             unlock() {
                 if (!this.ctx) {
                     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -510,7 +550,6 @@
                 }
             }
 
-            // Joue un bip simple et net
             playBeep(frequency = 880, duration = 0.16) {
                 if (this.muted) return;
                 this.unlock();
@@ -524,7 +563,6 @@
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(frequency, now);
 
-                    // Enveloppe douce pour éviter tout clic audio désagréable
                     gain.gain.setValueAtTime(0.001, now);
                     gain.gain.exponentialRampToValueAtTime(0.35, now + 0.015);
                     gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
@@ -539,10 +577,8 @@
                 }
             }
 
-            // Démarre la séquence de bip répétitif de fin de minuteur
             startAlarm() {
                 this.stopAlarm();
-                // Double bip immédiat puis répétition toutes les 850ms (synchronisé avec le clignotement CSS)
                 const triggerPattern = () => {
                     this.playBeep(880, 0.14);
                     setTimeout(() => {
@@ -564,7 +600,7 @@
 
         /**
          * ============================================================================
-         * 3. LOGIQUE PRINCIPALE DU MINUTEUR & JAUGE CIRCULAIRE
+         * 3. LOGIQUE PRINCIPALE DU MINUTEUR & DOCUMENT PICTURE-IN-PICTURE
          * ============================================================================
          */
         document.addEventListener('DOMContentLoaded', () => {
@@ -572,10 +608,13 @@
 
             // Éléments DOM
             const appBody = document.getElementById('app-body');
-            const appContainer = document.getElementById('app-container');
+            const appCard = document.getElementById('app-card');
             const pipPlaceholder = document.getElementById('pip-placeholder');
             const pipToggleBtn = document.getElementById('pip-toggle-btn');
             const pipRestoreBtn = document.getElementById('pip-restore-btn');
+            const iconPipEnter = document.getElementById('icon-pip-enter');
+            const iconPipExit = document.getElementById('icon-pip-exit');
+
             const timeDisplay = document.getElementById('time-display');
             const timeDisplayBtn = document.getElementById('time-display-btn');
             const statusBadge = document.getElementById('status-badge');
@@ -600,57 +639,65 @@
             const modalCancel = document.getElementById('modal-cancel');
             const modalConfirm = document.getElementById('modal-confirm');
 
-            // Référence vers la fenêtre Document Picture-in-Picture active
             let pipWindow = null;
 
             /**
-             * ============================================================================
-             * GESTION DE L'API DOCUMENT PICTURE-IN-PICTURE (Mini-fenêtre flottante)
-             * ============================================================================
+             * Synchronise l'état de clignotement d'alarme avec la fenêtre PiP
              */
             function syncAlarmClassToPip() {
                 if (!pipWindow || pipWindow.closed) return;
                 if (isFinished) {
                     pipWindow.document.body.classList.add('alarm-active-bg');
+                    appCard.classList.add('alarm-active-bg');
                 } else {
                     pipWindow.document.body.classList.remove('alarm-active-bg');
+                    appCard.classList.remove('alarm-active-bg');
                 }
             }
 
+            /**
+             * Rapatrie le minuteur dans la fenêtre principale à la fermeture du PiP
+             */
             function restoreFromPip() {
                 if (pipWindow && !pipWindow.closed) {
                     pipWindow.close();
                 }
                 pipWindow = null;
 
-                // Réintégration propre du minuteur et de la modale dans la fenêtre principale
-                if (appContainer.parentElement !== appBody) {
-                    appBody.appendChild(appContainer);
+                document.documentElement.classList.remove('is-pip');
+                appCard.classList.remove('alarm-active-bg');
+
+                if (appCard.parentElement !== appBody) {
+                    appBody.appendChild(appCard);
                 }
                 if (editModal.parentElement !== appBody) {
                     appBody.appendChild(editModal);
                 }
+
                 pipPlaceholder.classList.add('hidden');
                 pipPlaceholder.classList.remove('flex');
-                pipToggleBtn.classList.remove('text-cyan-400', 'border-cyan-500/50');
+                iconPipEnter.classList.remove('hidden');
+                iconPipExit.classList.add('hidden');
+                pipToggleBtn.classList.remove('border-cyan-500/50');
             }
 
+            /**
+             * Ouvre ou ferme la mini-fenêtre flottante Document Picture-in-Picture (235x245px)
+             */
             async function toggleDocumentPiP() {
-                // Si déjà ouvert en PiP, on le ferme et rapatrie l'interface
                 if (pipWindow && !pipWindow.closed) {
                     restoreFromPip();
                     return;
                 }
 
-                // Vérification du support de l'API Document Picture-in-Picture
                 if ('documentPictureInPicture' in window) {
                     try {
                         pipWindow = await window.documentPictureInPicture.requestWindow({
-                            width: 255,
-                            height: 345,
+                            width: 235,
+                            height: 245,
                         });
 
-                        // Copie de toutes les feuilles de style et balises <style>/<script> Tailwind dans la fenêtre PiP
+                        // Injection de toutes les règles CSS et styles Tailwind dans la fenêtre PiP
                         [...document.styleSheets].forEach((styleSheet) => {
                             try {
                                 const cssRules = [...styleSheet.cssRules].map((rule) => rule.cssText).join('');
@@ -667,40 +714,50 @@
                             }
                         });
 
-                        // Copie des styles inline et configuration Tailwind
                         document.querySelectorAll('style').forEach((styleEl) => {
                             pipWindow.document.head.appendChild(styleEl.cloneNode(true));
                         });
 
-                        // Configuration du body de la fenêtre PiP
-                        pipWindow.document.documentElement.className = 'dark';
-                        pipWindow.document.body.className = 'p-2.5 flex flex-col items-center justify-center transition-colors duration-300 overflow-hidden bg-[#0b0f19] text-slate-50';
+                        // Activation du mode plein cadre sans espace vide (html.is-pip)
+                        pipWindow.document.documentElement.className = 'dark is-pip';
+                        pipWindow.document.body.className = 'bg-[#0b0f19] text-slate-50 transition-colors duration-300 overflow-hidden m-0 p-0';
                         pipWindow.document.title = 'Minuteur ⏰';
 
-                        // Déplacement en direct du conteneur DOM et de la modale dans la fenêtre flottante
-                        pipWindow.document.body.appendChild(appContainer);
+                        // Déplacement en direct de #app-card et de la modale dans la fenêtre PiP
+                        pipWindow.document.body.appendChild(appCard);
                         pipWindow.document.body.appendChild(editModal);
 
-                        // Affichage de l'état détaché dans la fenêtre parente
+                        // Forcer l'ajustement exact aux dimensions minimales juste après l'injection
+                        try {
+                            pipWindow.resizeTo(235, 245);
+                            requestAnimationFrame(() => {
+                                try {
+                                    pipWindow.resizeTo(235, 245);
+                                } catch (e) {}
+                            });
+                        } catch (e) {}
+
+                        // Mise à jour des boutons et de l'état de la fenêtre parente
                         pipPlaceholder.classList.remove('hidden');
                         pipPlaceholder.classList.add('flex');
-                        pipToggleBtn.classList.add('text-cyan-400', 'border-cyan-500/50');
+                        iconPipEnter.classList.add('hidden');
+                        iconPipExit.classList.remove('hidden');
+                        pipToggleBtn.classList.add('border-cyan-500/50');
                         syncAlarmClassToPip();
 
                         // Raccourcis clavier également actifs dans la fenêtre PiP
                         pipWindow.addEventListener('keydown', handleGlobalKeydown);
 
-                        // Rapatriement automatique lorsque l'utilisateur ferme la fenêtre flottante
+                        // Rapatriement automatique à la fermeture
                         pipWindow.addEventListener('pagehide', () => {
                             restoreFromPip();
                         });
                     } catch (err) {
                         console.warn('Échec ouverture Document PiP, repli popup :', err);
-                        window.open(location.href, 'MinuteurMini', 'width=260,height=360,menubar=no,toolbar=no,location=no,status=no');
+                        window.open(location.href, 'MinuteurMini', 'width=235,height=245,menubar=no,toolbar=no,location=no,status=no');
                     }
                 } else {
-                    // Fallback popup compacte si le navigateur ne supporte pas Document PiP
-                    window.open(location.href, 'MinuteurMini', 'width=260,height=360,menubar=no,toolbar=no,location=no,status=no');
+                    window.open(location.href, 'MinuteurMini', 'width=235,height=245,menubar=no,toolbar=no,location=no,status=no');
                 }
             }
 
@@ -728,17 +785,14 @@
                 dialTicks.appendChild(line);
             }
 
-            // État du minuteur (en millisecondes pour une animation 60fps ultra-fluide)
-            let initialDurationMs = 5 * 60 * 1000; // 5 minutes par défaut
+            // État du minuteur
+            let initialDurationMs = 5 * 60 * 1000;
             let remainingMs = initialDurationMs;
             let endTimeTimestamp = null;
             let isRunning = false;
             let isFinished = false;
             let rafId = null;
 
-            /**
-             * Formate les millisecondes en chaîne MM:SS (arrondi au supérieur pendant le décompte)
-             */
             function formatTime(ms) {
                 const totalSeconds = Math.ceil(Math.max(0, ms) / 1000);
                 const minutes = Math.floor(totalSeconds / 60);
@@ -746,14 +800,10 @@
                 return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
             }
 
-            /**
-             * Met à jour l'affichage numérique, le titre de l'onglet et la jauge SVG
-             */
             function updateVisuals() {
                 const formatted = formatTime(remainingMs);
                 timeDisplay.textContent = formatted;
 
-                // Mise à jour du titre de l'onglet
                 if (isRunning) {
                     document.title = `${formatted} — Minuteur`;
                 } else if (isFinished) {
@@ -762,62 +812,49 @@
                     document.title = `Minuteur — PWA`;
                 }
 
-                // Calcul du ratio de progression (de 1.0 à 0.0)
                 const ratio = initialDurationMs > 0 ? Math.max(0, Math.min(1, remainingMs / initialDurationMs)) : 0;
                 const offset = CIRCUMFERENCE * (1 - ratio);
                 progressRing.style.strokeDashoffset = offset.toFixed(3);
 
-                // Changement progressif de couleur selon le temps restant
                 if (isFinished || remainingMs === 0) {
-                    progressRing.style.stroke = '#f43f5e'; // Rouge corail / Rose vif
+                    progressRing.style.stroke = '#f43f5e';
                     glowBackdrop.className = 'absolute inset-2 rounded-full bg-rose-500/20 blur-md transition-colors duration-500 pointer-events-none';
                 } else if (remainingMs <= 10000 && isRunning) {
-                    // Moins de 10 secondes : alerte rouge corail
                     progressRing.style.stroke = '#fb7185';
                     glowBackdrop.className = 'absolute inset-2 rounded-full bg-rose-500/15 blur-md transition-colors duration-500 pointer-events-none';
                 } else if (ratio <= 0.25 && isRunning) {
-                    // Dernier quart : ambre chaleureux
                     progressRing.style.stroke = '#f59e0b';
                     glowBackdrop.className = 'absolute inset-2 rounded-full bg-amber-500/15 blur-md transition-colors duration-500 pointer-events-none';
                 } else {
-                    // Normal : cyan électrique
                     progressRing.style.stroke = '#06b6d4';
                     glowBackdrop.className = 'absolute inset-2 rounded-full bg-cyan-500/10 blur-md transition-colors duration-500 pointer-events-none';
                 }
             }
 
-            /**
-             * Met en surbrillance le bouton preset correspondant à la durée choisie
-             */
             function highlightPreset(minutes) {
                 presetBtns.forEach(btn => {
                     const btnMin = parseInt(btn.dataset.minutes, 10);
                     if (btnMin === minutes) {
-                        btn.className = 'preset-btn py-1 rounded-lg border border-cyan-500/60 bg-cyan-500/10 text-cyan-300 font-medium text-[10px] transition-all active:scale-95 flex flex-col items-center justify-center';
-                        btn.querySelector('span:last-child').className = 'text-[8px] text-cyan-400/80 leading-none';
+                        btn.className = 'preset-btn py-0.5 rounded-md border border-cyan-500/60 bg-cyan-500/15 text-cyan-300 font-medium text-[10px] transition-all active:scale-95 flex flex-col items-center justify-center';
+                        btn.querySelector('span:last-child').className = 'text-[7px] text-cyan-400/80 leading-none';
                     } else {
-                        btn.className = 'preset-btn py-1 rounded-lg glass-panel hover:border-cyan-500/50 hover:bg-slate-800/80 text-slate-200 font-medium text-[10px] transition-all active:scale-95 flex flex-col items-center justify-center';
-                        btn.querySelector('span:last-child').className = 'text-[8px] text-slate-400 leading-none';
+                        btn.className = 'preset-btn py-0.5 rounded-md bg-slate-800/75 border border-slate-700/70 hover:border-cyan-500/50 hover:bg-slate-800 text-slate-200 font-medium text-[10px] transition-all active:scale-95 flex flex-col items-center justify-center';
+                        btn.querySelector('span:last-child').className = 'text-[7px] text-slate-400 leading-none';
                     }
                 });
             }
 
-            /**
-             * Désactive l'état d'alerte visuelle et sonore
-             */
             function clearAlarmState() {
                 isFinished = false;
                 beeper.stopAlarm();
                 appBody.classList.remove('alarm-active-bg');
+                appCard.classList.remove('alarm-active-bg');
                 if (pipWindow && !pipWindow.closed) {
                     pipWindow.document.body.classList.remove('alarm-active-bg');
                 }
                 timeDisplay.classList.remove('alarm-active-text');
             }
 
-            /**
-             * Déclenche l'alerte de fin de minuteur (00:00)
-             */
             function triggerAlarm() {
                 isRunning = false;
                 isFinished = true;
@@ -825,7 +862,7 @@
                 if (rafId) cancelAnimationFrame(rafId);
 
                 statusBadge.textContent = 'Écoulé !';
-                statusBadge.className = 'text-[8px] font-bold uppercase tracking-widest text-rose-400 mb-0.5';
+                statusBadge.className = 'text-[7.5px] font-bold uppercase tracking-widest text-rose-400 mb-0.5';
 
                 appBody.classList.add('alarm-active-bg');
                 syncAlarmClassToPip();
@@ -835,9 +872,6 @@
                 beeper.startAlarm();
             }
 
-            /**
-             * Boucle d'animation haute précision basée sur performance.now()
-             */
             function tick() {
                 if (!isRunning) return;
 
@@ -853,13 +887,9 @@
                 rafId = requestAnimationFrame(tick);
             }
 
-            /**
-             * Démarrer le minuteur
-             */
             function startTimer() {
                 beeper.unlock();
 
-                // Si l'alarme sonne, Start réinitialise et relance
                 if (isFinished) {
                     clearAlarmState();
                     remainingMs = initialDurationMs;
@@ -871,19 +901,16 @@
                 endTimeTimestamp = performance.now() + remainingMs;
 
                 statusBadge.textContent = 'En cours';
-                statusBadge.className = 'text-[8px] font-medium uppercase tracking-widest text-cyan-400 mb-0.5';
+                statusBadge.className = 'text-[7.5px] font-medium uppercase tracking-widest text-cyan-400 mb-0.5';
 
                 rafId = requestAnimationFrame(tick);
             }
 
-            /**
-             * Mettre en pause / Arrêter l'alerte
-             */
             function stopTimer() {
                 if (isFinished) {
                     clearAlarmState();
                     statusBadge.textContent = 'Arrêté';
-                    statusBadge.className = 'text-[8px] font-medium uppercase tracking-widest text-slate-400 mb-0.5';
+                    statusBadge.className = 'text-[7.5px] font-medium uppercase tracking-widest text-slate-400 mb-0.5';
                     updateVisuals();
                     return;
                 }
@@ -895,13 +922,10 @@
                 remainingMs = Math.max(0, endTimeTimestamp - performance.now());
 
                 statusBadge.textContent = 'Pause';
-                statusBadge.className = 'text-[8px] font-medium uppercase tracking-widest text-amber-400 mb-0.5';
+                statusBadge.className = 'text-[7.5px] font-medium uppercase tracking-widest text-amber-400 mb-0.5';
                 updateVisuals();
             }
 
-            /**
-             * Réinitialiser à la durée initiale sélectionnée
-             */
             function resetTimer() {
                 isRunning = false;
                 if (rafId) cancelAnimationFrame(rafId);
@@ -909,13 +933,10 @@
 
                 remainingMs = initialDurationMs;
                 statusBadge.textContent = 'Prêt';
-                statusBadge.className = 'text-[8px] font-medium uppercase tracking-widest text-slate-400 mb-0.5';
+                statusBadge.className = 'text-[7.5px] font-medium uppercase tracking-widest text-slate-400 mb-0.5';
                 updateVisuals();
             }
 
-            /**
-             * Définit une nouvelle durée en millisecondes
-             */
             function setDuration(ms, matchedPresetMinutes = null) {
                 beeper.unlock();
                 isRunning = false;
@@ -926,18 +947,16 @@
                 remainingMs = initialDurationMs;
 
                 statusBadge.textContent = 'Prêt';
-                statusBadge.className = 'text-[8px] font-medium uppercase tracking-widest text-slate-400 mb-0.5';
+                statusBadge.className = 'text-[7.5px] font-medium uppercase tracking-widest text-slate-400 mb-0.5';
 
                 highlightPreset(matchedPresetMinutes);
                 updateVisuals();
             }
 
-            // Écouteurs des boutons principaux
             btnStart.addEventListener('click', startTimer);
             btnStop.addEventListener('click', stopTimer);
             btnReset.addEventListener('click', resetTimer);
 
-            // Écouteurs des présélections (1, 2, 5, 10, 15 min)
             presetBtns.forEach(btn => {
                 btn.addEventListener('click', () => {
                     const minutes = parseInt(btn.dataset.minutes, 10);
@@ -945,7 +964,6 @@
                 });
             });
 
-            // Écouteurs des boutons d'ajustement fin (-1m, -10s, +10s, +1m)
             adjustBtns.forEach(btn => {
                 btn.addEventListener('click', () => {
                     beeper.unlock();
@@ -961,17 +979,15 @@
                         initialDurationMs = nextMs;
                         remainingMs = nextMs;
                         statusBadge.textContent = 'Prêt';
-                        statusBadge.className = 'text-[8px] font-medium uppercase tracking-widest text-slate-400 mb-0.5';
+                        statusBadge.className = 'text-[7.5px] font-medium uppercase tracking-widest text-slate-400 mb-0.5';
                     }
 
-                    // Vérifie si la nouvelle durée correspond à un preset
                     const exactMinutes = remainingMs % 60000 === 0 ? remainingMs / 60000 : null;
                     highlightPreset([1, 2, 5, 10, 15].includes(exactMinutes) ? exactMinutes : null);
                     updateVisuals();
                 });
             });
 
-            // Gestion du bouton muet / test son
             soundToggleBtn.addEventListener('click', () => {
                 beeper.muted = !beeper.muted;
                 if (beeper.muted) {
@@ -985,7 +1001,6 @@
                 }
             });
 
-            // Modale d'édition manuelle au clic sur l'affichage numérique
             timeDisplayBtn.addEventListener('click', () => {
                 stopTimer();
                 const totalSec = Math.ceil(remainingMs / 1000);
@@ -1018,7 +1033,6 @@
                 closeModal();
             });
 
-            // Raccourcis clavier pratiques (Espace pour Start/Stop, R pour Réinit)
             function handleGlobalKeydown(e) {
                 if (!editModal.classList.contains('hidden')) {
                     if (e.key === 'Escape') closeModal();
@@ -1040,7 +1054,6 @@
 
             window.addEventListener('keydown', handleGlobalKeydown);
 
-            // Initialisation visuelle
             updateVisuals();
         });
     </script>
