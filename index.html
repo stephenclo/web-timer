@@ -191,7 +191,7 @@
         <header id="app-header" class="w-full flex items-center justify-between">
             <div id="header-title-group">
                 <h1 class="text-sm font-semibold tracking-tight text-slate-100 leading-none">Minuteur</h1>
-                <span id="pwa-status" class="text-[11px] text-slate-400 font-medium block mt-0.5">Prêt • Hors-ligne</span>
+                <span id="pwa-status" class="text-[11px] text-slate-400 font-medium block mt-0.5">Hors-ligne</span>
             </div>
 
             <div class="flex items-center gap-1.5 ml-auto">
@@ -262,9 +262,9 @@
 
                 <!-- Contenu central à l'intérieur du cercle -->
                 <div class="absolute inset-0 flex flex-col items-center justify-center">
-                    <!-- Indicateur d'état -->
-                    <span id="status-badge" class="text-xs font-semibold uppercase tracking-wider text-slate-300 mb-0.5">
-                        Prêt
+                    <!-- Indicateur d'état (affiché uniquement en PAUSE) -->
+                    <span id="status-badge" class="hidden text-xs font-semibold uppercase tracking-wider text-amber-400 mb-0.5">
+                        Pause
                     </span>
 
                     <!-- Affichage numérique MM:SS (cliquable pour édition manuelle) -->
@@ -311,7 +311,7 @@
                     <span>Start</span>
                 </button>
 
-                <!-- STOP -->
+                <!-- PAUSE -->
                 <button 
                     id="btn-stop" 
                     type="button"
@@ -321,7 +321,7 @@
                         <rect x="6" y="4" width="4" height="16" rx="1"></rect>
                         <rect x="14" y="4" width="4" height="16" rx="1"></rect>
                     </svg>
-                    <span>Stop</span>
+                    <span>Pause</span>
                 </button>
 
                 <!-- RÉINIT -->
@@ -857,7 +857,7 @@
                 if (isRunning) {
                     document.title = `${formatted} — Minuteur`;
                 } else if (isFinished) {
-                    document.title = `00:00 — Terminé !`;
+                    document.title = `00:00 — Minuteur`;
                 } else {
                     document.title = `Minuteur — PWA`;
                 }
@@ -909,8 +909,7 @@
                 remainingMs = 0;
                 if (rafId) cancelAnimationFrame(rafId);
 
-                statusBadge.textContent = 'Écoulé !';
-                statusBadge.className = 'text-xs font-bold uppercase tracking-wider text-rose-400 mb-0.5';
+                statusBadge.classList.add('hidden');
 
                 appBody.classList.add('alarm-active-bg');
                 syncAlarmClassToPip();
@@ -948,8 +947,7 @@
                 isRunning = true;
                 endTimeTimestamp = performance.now() + remainingMs;
 
-                statusBadge.textContent = 'En cours';
-                statusBadge.className = 'text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-0.5';
+                statusBadge.classList.add('hidden');
 
                 rafId = requestAnimationFrame(tick);
             }
@@ -957,8 +955,7 @@
             function stopTimer() {
                 if (isFinished) {
                     clearAlarmState();
-                    statusBadge.textContent = 'Arrêté';
-                    statusBadge.className = 'text-xs font-semibold uppercase tracking-wider text-slate-300 mb-0.5';
+                    statusBadge.classList.add('hidden');
                     updateVisuals();
                     return;
                 }
@@ -980,8 +977,7 @@
                 clearAlarmState();
 
                 remainingMs = initialDurationMs;
-                statusBadge.textContent = 'Prêt';
-                statusBadge.className = 'text-xs font-semibold uppercase tracking-wider text-slate-300 mb-0.5';
+                statusBadge.classList.add('hidden');
                 updateVisuals();
             }
 
@@ -994,8 +990,7 @@
                 initialDurationMs = Math.max(1000, ms);
                 remainingMs = initialDurationMs;
 
-                statusBadge.textContent = 'Prêt';
-                statusBadge.className = 'text-xs font-semibold uppercase tracking-wider text-slate-300 mb-0.5';
+                statusBadge.classList.add('hidden');
 
                 highlightPreset(matchedPresetMinutes);
                 updateVisuals();
@@ -1013,8 +1008,7 @@
                     const nextMs = Math.max(5000, remainingMs + deltaMs);
                     initialDurationMs = nextMs;
                     remainingMs = nextMs;
-                    statusBadge.textContent = 'Prêt';
-                    statusBadge.className = 'text-xs font-semibold uppercase tracking-wider text-slate-300 mb-0.5';
+                    statusBadge.classList.add('hidden');
                     const matchedPreset = (nextMs % 60000 === 0 && [1, 2, 5, 10, 15].includes(nextMs / 60000)) ? (nextMs / 60000) : null;
                     highlightPreset(matchedPreset);
                 }
