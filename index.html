@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#0b0f19">
+    <meta name="theme-color" content="#090d16">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Minuteur">
     <title>Minuteur — PWA</title>
     
-    <!-- Lien Manifeste PWA (injecté dynamiquement via Blob) -->
+    <!-- Lien Manifeste PWA (injecté dynamiquement en data: URL) -->
     <link id="pwa-manifest" rel="manifest">
     
     <!-- Favicon & Apple Touch Icon (générés dynamiquement en PNG haute résolution via Canvas pour l'emoji ⏰) -->
@@ -388,131 +389,113 @@
          */
         (function initPWA() {
             /**
-             * Ouvre ou ferme la mini-fenêtre flottante Document Picture-in-Picture (275x310px)
+             * Génère une icône PNG réelle via Canvas avec l'emoji ⏰ centré sur fond sombre arrondi #090d16
              */
-            async function toggleDocumentPiP() {
-                if (pipWindow && !pipWindow.closed) {
-                    restoreFromPip();
-                    return;
-                }
+            function createEmojiPngIcon(size) {
+                const canvas = document.createElement('canvas');
+                canvas.width = size;
+                canvas.height = size;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return '';
 
-                if ('documentPictureInPicture' in window) {
-                    try {
-                        pipWindow = await window.documentPictureInPicture.requestWindow({
-                            width: 275,
-                            height: 310,
-                        });
+                // Fond sombre arrondi #090d16
+                const radius = Math.round(size * 0.22);
+                ctx.fillStyle = '#090d16';
+                ctx.beginPath();
+                ctx.moveTo(radius, 0);
+                ctx.lineTo(size - radius, 0);
+                ctx.quadraticCurveTo(size, 0, size, radius);
+                ctx.lineTo(size, size - radius);
+                ctx.quadraticCurveTo(size, size, size - radius, size);
+                ctx.lineTo(radius, size);
+                ctx.quadraticCurveTo(0, size, 0, size - radius);
+                ctx.lineTo(0, radius);
+                ctx.quadraticCurveTo(0, 0, radius, 0);
+                ctx.closePath();
+                ctx.fill();
 
-                        // Injection de toutes les règles CSS et styles Tailwind dans la fenêtre PiP
-                        [...document.styleSheets].forEach((styleSheet) => {
-                            try {
-                                const cssRules = [...styleSheet.cssRules].map((rule) => rule.cssText).join('');
-                                const style = document.createElement('style');
-                                style.textContent = cssRules;
-                                pipWindow.document.head.appendChild(style);
-                            } catch (e) {
-                                if (styleSheet.href) {
-                                    const link = document.createElement('link');
-                                    link.rel = 'stylesheet';
-                                    link.href = styleSheet.href;
-                                    pipWindow.document.head.appendChild(link);
-                                }
-                            }
-                        });
+                // Bordure subtile
+                ctx.strokeStyle = 'rgba(30, 41, 59, 0.9)';
+                ctx.lineWidth = Math.max(1, size * 0.02);
+                ctx.stroke();
 
-                        document.querySelectorAll('style').forEach((styleEl) => {
-                            pipWindow.document.head.appendChild(styleEl.cloneNode(true));
-                        });
+                // Rendu de l'emoji réveil ⏰ centré
+                ctx.font = `${Math.round(size * 0.62)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('⏰', size / 2, size / 2 + size * 0.04);
 
-                        // Activation du mode plein cadre sans espace vide (html.is-pip)
-                        pipWindow.document.documentElement.className = 'dark is-pip';
-                        pipWindow.document.body.className = 'bg-[#0b0f19] text-slate-50 transition-colors duration-300 overflow-hidden m-0 p-0';
-                        pipWindow.document.title = 'Minuteur ⏰';
-
-                        // Déplacement en direct de #app-card et de la modale dans la fenêtre PiP
-                        pipWindow.document.body.appendChild(appCard);
-                        pipWindow.document.body.appendChild(editModal);
-
-                        // Forcer l'ajustement exact aux dimensions lisibles juste après l'injection
-                        try {
-                            pipWindow.resizeTo(275, 310);
-                            requestAnimationFrame(() => {
-                                try {
-                                    pipWindow.resizeTo(275, 310);
-                                } catch (e) {}
-                            });
-                        } catch (e) {}
-
-                        // Mise à jour des boutons et de l'état de la fenêtre parente
-                        pipPlaceholder.classList.remove('hidden');
-                        pipPlaceholder.classList.add('flex');
-                        iconPipEnter.classList.add('hidden');
-                        iconPipExit.classList.remove('hidden');
-                        pipToggleBtn.classList.add('border-cyan-500/50');
-                        syncAlarmClassToPip();
-
-                        // Raccourcis clavier également actifs dans la fenêtre PiP
-                        pipWindow.addEventListener('keydown', handleGlobalKeydown);
-
-                        // Rapatriement automatique à la fermeture
-                        pipWindow.addEventListener('pagehide', () => {
-                            restoreFromPip();
-                        });
-                    } catch (err) {
-                        console.warn('Échec ouverture Document PiP, repli popup :', err);
-                        window.open(location.href, 'MinuteurMini', 'width=275,height=310,menubar=no,toolbar=no,location=no,status=no');
-                    }
-                } else {
-                    window.open(location.href, 'MinuteurMini', 'width=275,height=310,menubar=no,toolbar=no,location=no,status=no');
-                }
+                return canvas.toDataURL('image/png');
             }
 
-            window.addEventListener('load', () => {
-                requestAnimationFrame(() => {
-                    fitWindowToContent();
-                    setTimeout(fitWindowToContent, 150);
-                });
-            });
+            const icon64Png = createEmojiPngIcon(64);
+            const icon192Png = createEmojiPngIcon(192);
+            const icon512Png = createEmojiPngIcon(512);
 
-            // Manifeste Web App
+            if (icon64Png) {
+                document.getElementById('favicon-link').setAttribute('href', icon64Png);
+            }
+            if (icon192Png) {
+                document.getElementById('apple-icon-link').setAttribute('href', icon192Png);
+            }
+
+            // Détermination propre de start_url et scope selon le protocole
+            const isHttp = window.location.protocol === 'http:' || window.location.protocol === 'https:';
+            const baseUrl = isHttp
+                ? (window.location.origin + window.location.pathname)
+                : './';
+
+            // Manifeste Web App complet conforme aux critères d'installabilité Chromium
             const manifest = {
-                name: 'Minuteur Dark PWA',
+                name: 'Minuteur',
                 short_name: 'Minuteur',
                 description: 'Minuteur moderne avec thème sombre, jauge circulaire et alerte sonore.',
-                start_url: location.href,
+                start_url: baseUrl,
+                scope: baseUrl,
                 display: 'standalone',
-                background_color: '#0b0f19',
-                theme_color: '#0b0f19',
+                background_color: '#090d16',
+                theme_color: '#090d16',
                 orientation: 'portrait',
                 icons: [
                     {
                         src: icon192Png,
                         sizes: '192x192',
                         type: 'image/png',
-                        purpose: 'any maskable'
+                        purpose: 'any'
+                    },
+                    {
+                        src: icon192Png,
+                        sizes: '192x192',
+                        type: 'image/png',
+                        purpose: 'maskable'
                     },
                     {
                         src: icon512Png,
                         sizes: '512x512',
                         type: 'image/png',
-                        purpose: 'any maskable'
+                        purpose: 'any'
+                    },
+                    {
+                        src: icon512Png,
+                        sizes: '512x512',
+                        type: 'image/png',
+                        purpose: 'maskable'
                     }
                 ]
             };
 
             try {
-                const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
-                const manifestURL = URL.createObjectURL(manifestBlob);
-                document.getElementById('pwa-manifest').setAttribute('href', manifestURL);
+                const manifestDataUrl = 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest));
+                document.getElementById('pwa-manifest').setAttribute('href', manifestDataUrl);
             } catch (err) {
-                console.warn('Impossible de créer le manifeste Blob :', err);
+                console.warn('Impossible de créer le manifeste :', err);
             }
 
-            // Enregistrement du Service Worker hors-ligne
+            // Enregistrement du Service Worker hors-ligne (requis par Chromium pour l'installation PWA)
             const pwaStatusEl = document.getElementById('pwa-status');
-            if ('serviceWorker' in navigator) {
+            if ('serviceWorker' in navigator && isHttp) {
                 const swCode = `
-                    const CACHE_NAME = 'minuteur-pwa-v1';
+                    const CACHE_NAME = 'minuteur-pwa-v2';
                     self.addEventListener('install', (event) => {
                         self.skipWaiting();
                     });
@@ -520,8 +503,15 @@
                         event.waitUntil(self.clients.claim());
                     });
                     self.addEventListener('fetch', (event) => {
+                        if (event.request.method !== 'GET') return;
                         event.respondWith(
-                            fetch(event.request).catch(() => caches.match(event.request))
+                            fetch(event.request)
+                                .then((response) => {
+                                    const copy = response.clone();
+                                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy)).catch(() => {});
+                                    return response;
+                                })
+                                .catch(() => caches.match(event.request))
                         );
                     });
                 `;
@@ -538,6 +528,8 @@
                 } catch (e) {
                     pwaStatusEl.textContent = 'Mode Web • Prêt';
                 }
+            } else {
+                pwaStatusEl.textContent = 'Mode Web • Prêt';
             }
         })();
 
@@ -657,16 +649,82 @@
             let pipWindow = null;
 
             /**
-             * Synchronise l'état de clignotement d'alarme avec la fenêtre PiP
+             * Ouvre ou ferme la mini-fenêtre flottante Document Picture-in-Picture (275x310px)
              */
-            function syncAlarmClassToPip() {
-                if (!pipWindow || pipWindow.closed) return;
-                if (isFinished) {
-                    pipWindow.document.body.classList.add('alarm-active-bg');
-                    appCard.classList.add('alarm-active-bg');
+            async function toggleDocumentPiP() {
+                if (pipWindow && !pipWindow.closed) {
+                    restoreFromPip();
+                    return;
+                }
+
+                if ('documentPictureInPicture' in window) {
+                    try {
+                        pipWindow = await window.documentPictureInPicture.requestWindow({
+                            width: 275,
+                            height: 310,
+                        });
+
+                        // Injection de toutes les règles CSS et styles Tailwind dans la fenêtre PiP
+                        [...document.styleSheets].forEach((styleSheet) => {
+                            try {
+                                const cssRules = [...styleSheet.cssRules].map((rule) => rule.cssText).join('');
+                                const style = document.createElement('style');
+                                style.textContent = cssRules;
+                                pipWindow.document.head.appendChild(style);
+                            } catch (e) {
+                                if (styleSheet.href) {
+                                    const link = document.createElement('link');
+                                    link.rel = 'stylesheet';
+                                    link.href = styleSheet.href;
+                                    pipWindow.document.head.appendChild(link);
+                                }
+                            }
+                        });
+
+                        document.querySelectorAll('style').forEach((styleEl) => {
+                            pipWindow.document.head.appendChild(styleEl.cloneNode(true));
+                        });
+
+                        // Activation du mode plein cadre sans espace vide (html.is-pip)
+                        pipWindow.document.documentElement.className = 'dark is-pip';
+                        pipWindow.document.body.className = 'bg-[#090d16] text-slate-50 transition-colors duration-300 overflow-hidden m-0 p-0';
+                        pipWindow.document.title = 'Minuteur ⏰';
+
+                        // Déplacement en direct de #app-card et de la modale dans la fenêtre PiP
+                        pipWindow.document.body.appendChild(appCard);
+                        pipWindow.document.body.appendChild(editModal);
+
+                        // Forcer l'ajustement exact aux dimensions lisibles juste après l'injection
+                        try {
+                            pipWindow.resizeTo(275, 310);
+                            requestAnimationFrame(() => {
+                                try {
+                                    pipWindow.resizeTo(275, 310);
+                                } catch (e) {}
+                            });
+                        } catch (e) {}
+
+                        // Mise à jour des boutons et de l'état de la fenêtre parente
+                        pipPlaceholder.classList.remove('hidden');
+                        pipPlaceholder.classList.add('flex');
+                        iconPipEnter.classList.add('hidden');
+                        iconPipExit.classList.remove('hidden');
+                        pipToggleBtn.classList.add('border-cyan-500/50');
+                        syncAlarmClassToPip();
+
+                        // Raccourcis clavier également actifs dans la fenêtre PiP
+                        pipWindow.addEventListener('keydown', handleGlobalKeydown);
+
+                        // Rapatriement automatique à la fermeture
+                        pipWindow.addEventListener('pagehide', () => {
+                            restoreFromPip();
+                        });
+                    } catch (err) {
+                        console.warn('Échec ouverture Document PiP, repli popup :', err);
+                        window.open(location.href, 'MinuteurMini', 'width=275,height=310,menubar=no,toolbar=no,location=no,status=no');
+                    }
                 } else {
-                    pipWindow.document.body.classList.remove('alarm-active-bg');
-                    appCard.classList.remove('alarm-active-bg');
+                    window.open(location.href, 'MinuteurMini', 'width=275,height=310,menubar=no,toolbar=no,location=no,status=no');
                 }
             }
 
