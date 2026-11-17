@@ -103,6 +103,14 @@
             transition: stroke 0.4s ease;
         }
 
+        /* Garantie explicite d'interactivité sur tous les boutons */
+        button, [data-minutes], [data-adjust] {
+            pointer-events: auto !important;
+            cursor: pointer !important;
+            position: relative;
+            z-index: 10;
+        }
+
         /* Ajustement strict au contenu en mode fenêtre standard / PWA */
         html, body {
             width: fit-content;
@@ -196,8 +204,9 @@
                     <svg id="icon-pip-exit" class="w-4 h-4 hidden text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 9L4 4m0 0v4m0-4h4M15 15l5 5m0 0v-4m0 4h-4" />
                     </svg>
+                </button>
                 <!-- Bouton test / activation son (synchronisé avec l'état réel de l'AudioContext) -->
-                <button id="sound-toggle-btn" title="Son en attente d'activation — Cliquer pour activer" class="relative p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/90 border border-amber-500/40 text-slate-200 transition-all" aria-label="Gestion du son">
+                <button id="sound-toggle-btn" type="button" title="Son en attente d'activation — Cliquer pour activer" class="relative p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/90 border border-amber-500/40 text-slate-200 transition-all" aria-label="Gestion du son">
                     <svg id="icon-sound-on" class="w-4 h-4 text-amber-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                         <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                         <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
@@ -384,6 +393,92 @@
     <script>
         /**
          * ============================================================================
+         * 1. INITIALISATION PWA SÉCURISÉE (Icônes PNG ⏰ Canvas + Manifeste sans SW bloquant)
+         * ============================================================================
+         */
+        function initPWA() {
+            try {
+                // Désinscription préventive d'anciens Service Workers blob: éventuels
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistrations().then((registrations) => {
+                        registrations.forEach((reg) => {
+                            if (reg.active && reg.active.scriptURL && reg.active.scriptURL.startsWith('blob:')) {
+                                reg.unregister().catch(() => {});
+                            }
+                        });
+                    }).catch(() => {});
+                }
+
+                // Génération dynamique des icônes PNG haute résolution via Canvas
+                const generateEmojiPng = (size) => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = size;
+                    canvas.height = size;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) return null;
+
+                    const radius = size * 0.22;
+                    ctx.fillStyle = '#090d16';
+                    ctx.beginPath();
+                    ctx.moveTo(radius, 0);
+                    ctx.lineTo(size - radius, 0);
+                    ctx.quadraticCurveTo(size, 0, size, radius);
+                    ctx.lineTo(size, size - radius);
+                    ctx.quadraticCurveTo(size, size, size - radius, size);
+                    ctx.lineTo(radius, size);
+                    ctx.quadraticCurveTo(0, size, 0, size - radius);
+                    ctx.lineTo(0, radius);
+                    ctx.quadraticCurveTo(0, 0, radius, 0);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    ctx.font = `${Math.round(size * 0.66)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('⏰', size / 2, size / 2 + size * 0.04);
+
+                    return canvas.toDataURL('image/png');
+                };
+
+                const icon64 = generateEmojiPng(64);
+                const icon192 = generateEmojiPng(192);
+                const icon512 = generateEmojiPng(512);
+
+                if (icon64) {
+                    const fav = document.getElementById('favicon-link');
+                    if (fav) fav.href = icon64;
+                }
+                if (icon192) {
+                    const appleIcon = document.getElementById('apple-icon-link');
+                    if (appleIcon) appleIcon.href = icon192;
+                }
+
+                if (icon192 && icon512) {
+                    const manifest = {
+                        name: 'Minuteur PWA',
+                        short_name: 'Minuteur',
+                        description: 'Minuteur compact en thème sombre avec jauge circulaire',
+                        start_url: location.href,
+                        display: 'standalone',
+                        background_color: '#0b0f19',
+                        theme_color: '#090d16',
+                        icons: [
+                            { src: icon192, sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+                            { src: icon512, sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
+                        ]
+                    };
+                    const manifestLink = document.getElementById('pwa-manifest');
+                    if (manifestLink) {
+                        manifestLink.href = 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest));
+                    }
+                }
+            } catch (err) {
+                console.warn('Initialisation PWA ignorée:', err);
+            }
+        }
+
+        /**
+         * ============================================================================
          * 2. SYNTHÉTISEUR AUDIO WEB AUDIO API (Synchronisé avec l'état réel du navigateur)
          * ============================================================================
          */
@@ -393,30 +488,38 @@
                 this.soundEnabled = true;
                 this.alarmInterval = null;
                 this.onStateChangeCallback = onStateChangeCallback;
-                this.initContext();
+                try {
+                    this.initContext();
+                } catch (e) {
+                    console.warn('AudioContext différé:', e);
+                }
             }
 
             /**
              * Initialise l'AudioContext dès le démarrage et écoute ses changements d'état
              */
             initContext() {
-                if (!this.ctx) {
-                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-                    if (AudioCtx) {
-                        this.ctx = new AudioCtx();
-                        this.ctx.onstatechange = () => {
+                try {
+                    if (!this.ctx) {
+                        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                        if (AudioCtx) {
+                            this.ctx = new AudioCtx();
+                            this.ctx.onstatechange = () => {
+                                if (this.onStateChangeCallback) {
+                                    this.onStateChangeCallback(this.getAudioStatus());
+                                }
+                            };
+                        }
+                    }
+                    if (this.ctx && this.ctx.state === 'suspended' && this.soundEnabled) {
+                        this.ctx.resume().catch(() => {
                             if (this.onStateChangeCallback) {
                                 this.onStateChangeCallback(this.getAudioStatus());
                             }
-                        };
+                        });
                     }
-                }
-                if (this.ctx && this.ctx.state === 'suspended' && this.soundEnabled) {
-                    this.ctx.resume().catch(() => {
-                        if (this.onStateChangeCallback) {
-                            this.onStateChangeCallback(this.getAudioStatus());
-                        }
-                    });
+                } catch (e) {
+                    // Protection contre toute exception navigateur
                 }
                 if (this.onStateChangeCallback) {
                     this.onStateChangeCallback(this.getAudioStatus());
@@ -503,6 +606,8 @@
          * ============================================================================
          */
         document.addEventListener('DOMContentLoaded', () => {
+            initPWA();
+
             // Éléments DOM
             const appBody = document.getElementById('app-body');
             const appCard = document.getElementById('app-card');
@@ -684,12 +789,16 @@
              */
             function restoreFromPip() {
                 if (pipWindow && !pipWindow.closed) {
-                    pipWindow.close();
+                    try {
+                        pipWindow.close();
+                    } catch (e) {}
                 }
                 pipWindow = null;
 
                 document.documentElement.classList.remove('is-pip');
                 appCard.classList.remove('alarm-active-bg');
+                appCard.style.display = 'flex';
+                appCard.style.pointerEvents = 'auto';
 
                 if (appCard.parentElement !== appBody) {
                     appBody.appendChild(appCard);
@@ -704,9 +813,6 @@
                 iconPipExit.classList.add('hidden');
                 pipToggleBtn.classList.remove('border-cyan-500/50');
             }
-
-            pipToggleBtn.addEventListener('click', toggleDocumentPiP);
-            pipRestoreBtn.addEventListener('click', restoreFromPip);
 
             // Constantes géométriques du cercle SVG (viewBox 160x160, r = 70 => 2 * PI * 70 = 439.823)
             const RADIUS = 70;
@@ -895,55 +1001,45 @@
                 updateVisuals();
             }
 
-            btnStart.addEventListener('click', startTimer);
-            btnStop.addEventListener('click', stopTimer);
-            btnReset.addEventListener('click', resetTimer);
+            function handleAdjustDelta(deltaMs) {
+                beeper.unlock();
+                if (isFinished) clearAlarmState();
 
-            presetBtns.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const minutes = parseInt(btn.dataset.minutes, 10);
-                    setDuration(minutes * 60 * 1000, minutes);
-                });
-            });
+                if (isRunning) {
+                    endTimeTimestamp = Math.max(performance.now() + 1000, endTimeTimestamp + deltaMs);
+                    remainingMs = endTimeTimestamp - performance.now();
+                    initialDurationMs = Math.max(initialDurationMs, remainingMs);
+                } else {
+                    const nextMs = Math.max(5000, remainingMs + deltaMs);
+                    initialDurationMs = nextMs;
+                    remainingMs = nextMs;
+                    statusBadge.textContent = 'Prêt';
+                    statusBadge.className = 'text-xs font-semibold uppercase tracking-wider text-slate-300 mb-0.5';
+                    const matchedPreset = (nextMs % 60000 === 0 && [1, 2, 5, 10, 15].includes(nextMs / 60000)) ? (nextMs / 60000) : null;
+                    highlightPreset(matchedPreset);
+                }
+                updateVisuals();
+            }
 
-            adjustBtns.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    beeper.unlock();
-                    if (isFinished) clearAlarmState();
-
-                    const deltaMs = parseInt(btn.dataset.adjust, 10) * 1000;
-                    if (isRunning) {
-                        endTimeTimestamp = Math.max(performance.now() + 1000, endTimeTimestamp + deltaMs);
-                        remainingMs = endTimeTimestamp - performance.now();
-                        initialDurationMs = Math.max(initialDurationMs, remainingMs);
-                    } else {
-                        const nextMs = Math.max(5000, remainingMs + deltaMs);
-                        initialDurationMs = nextMs;
-                        remainingMs = nextMs;
-                        statusBadge.textContent = 'Prêt';
-                        statusBadge.className = 'text-xs font-semibold uppercase tracking-wider text-slate-300 mb-0.5';
-            soundToggleBtn.addEventListener('click', async () => {
+            async function handleSoundToggle() {
                 const currentStatus = beeper.getAudioStatus();
 
                 if (currentStatus === 'pending') {
-                    // Son activé mais bloqué par le navigateur : on le débloque et on confirme par un bip
                     beeper.soundEnabled = true;
                     await beeper.unlock();
                     beeper.playBeep(880, 0.08);
                 } else if (currentStatus === 'ready') {
-                    // Son actif et prêt : on coupe le son
                     beeper.soundEnabled = false;
                     beeper.stopAlarm();
                     updateSoundIconUI('muted');
                 } else {
-                    // Son coupé ('muted') : on le réactive, on débloque l'AudioContext et on joue un bip
                     beeper.soundEnabled = true;
                     await beeper.unlock();
                     beeper.playBeep(880, 0.08);
                 }
-            });
+            }
 
-            timeDisplayBtn.addEventListener('click', () => {
+            function openEditModal() {
                 stopTimer();
                 const totalSec = Math.ceil(remainingMs / 1000);
                 inputMin.value = Math.floor(totalSec / 60);
@@ -952,19 +1048,14 @@
                 editModal.classList.add('flex');
                 inputMin.focus();
                 inputMin.select();
-            });
+            }
 
             function closeModal() {
                 editModal.classList.add('hidden');
                 editModal.classList.remove('flex');
             }
 
-            modalCancel.addEventListener('click', closeModal);
-            editModal.addEventListener('click', (e) => {
-                if (e.target === editModal) closeModal();
-            });
-
-            modalConfirm.addEventListener('click', () => {
+            function applyEditModal() {
                 const m = Math.max(0, Math.min(180, parseInt(inputMin.value, 10) || 0));
                 const s = Math.max(0, Math.min(59, parseInt(inputSec.value, 10) || 0));
                 const totalMs = (m * 60 + s) * 1000;
@@ -973,12 +1064,87 @@
                     setDuration(totalMs, matchedPreset);
                 }
                 closeModal();
-            });
+            }
+
+            /**
+             * Délégation globale des clics (résiliente aux transferts DOM et PiP)
+             */
+            function handleDelegatedClick(e) {
+                const target = e.target;
+                if (!target || typeof target.closest !== 'function') return;
+
+                if (target.closest('#btn-start')) {
+                    startTimer();
+                    return;
+                }
+                if (target.closest('#btn-stop')) {
+                    stopTimer();
+                    return;
+                }
+                if (target.closest('#btn-reset')) {
+                    resetTimer();
+                    return;
+                }
+                if (target.closest('#sound-toggle-btn')) {
+                    handleSoundToggle();
+                    return;
+                }
+                if (target.closest('#pip-toggle-btn')) {
+                    toggleDocumentPiP();
+                    return;
+                }
+                if (target.closest('#pip-restore-btn')) {
+                    restoreFromPip();
+                    return;
+                }
+                if (target.closest('#time-display-btn')) {
+                    openEditModal();
+                    return;
+                }
+                if (target.closest('#modal-cancel') || target === editModal) {
+                    closeModal();
+                    return;
+                }
+                if (target.closest('#modal-confirm')) {
+                    applyEditModal();
+                    return;
+                }
+
+                const presetBtn = target.closest('[data-minutes]');
+                if (presetBtn) {
+                    const minutes = parseInt(presetBtn.dataset.minutes, 10);
+                    if (!isNaN(minutes)) {
+                        setDuration(minutes * 60 * 1000, minutes);
+                    }
+                    return;
+                }
+
+                const adjustBtn = target.closest('[data-adjust]');
+                if (adjustBtn) {
+                    const deltaSec = parseInt(adjustBtn.dataset.adjust, 10);
+                    if (!isNaN(deltaSec)) {
+                        handleAdjustDelta(deltaSec * 1000);
+                    }
+                    return;
+                }
+            }
+
+            document.addEventListener('click', handleDelegatedClick);
+
+            // Attache aussi la délégation lors de l'ouverture du Picture-in-Picture
+            const originalToggleDocumentPiP = toggleDocumentPiP;
+            toggleDocumentPiP = async function () {
+                await originalToggleDocumentPiP();
+                if (pipWindow && !pipWindow.closed && !pipWindow.document._delegationBound) {
+                    pipWindow.document.addEventListener('click', handleDelegatedClick);
+                    pipWindow.document._delegationBound = true;
+                }
+            };
 
             function handleGlobalKeydown(e) {
                 if (!editModal.classList.contains('hidden')) {
                     if (e.key === 'Escape') closeModal();
-                    if (e.key === 'Enter') modalConfirm.click();
+                    if (e.key === 'Enter') applyEditModal();
                     return;
                 }
 
