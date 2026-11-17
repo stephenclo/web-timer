@@ -196,11 +196,9 @@
                     <svg id="icon-pip-exit" class="w-4 h-4 hidden text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 9L4 4m0 0v4m0-4h4M15 15l5 5m0 0v-4m0 4h-4" />
                     </svg>
-                </button>
-
-                <!-- Bouton test / activation son -->
-                <button id="sound-toggle-btn" title="Activer/Couper le bip sonore" class="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/90 border border-slate-700/80 text-slate-200 transition-all" aria-label="Gestion du son">
-                    <svg id="icon-sound-on" class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <!-- Bouton test / activation son (synchronisé avec l'état réel de l'AudioContext) -->
+                <button id="sound-toggle-btn" title="Son en attente d'activation — Cliquer pour activer" class="relative p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/90 border border-amber-500/40 text-slate-200 transition-all" aria-label="Gestion du son">
+                    <svg id="icon-sound-on" class="w-4 h-4 text-amber-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                         <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                         <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
                         <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
@@ -210,6 +208,8 @@
                         <line x1="23" y1="9" x2="17" y2="15"></line>
                         <line x1="17" y1="9" x2="23" y2="15"></line>
                     </svg>
+                    <!-- Point d'attention ambre lorsque l'autoplay audio est bloqué par le navigateur -->
+                    <span id="sound-pending-dot" class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-[#0b0f19]"></span>
                 </button>
             </div>
         </header>
@@ -384,183 +384,75 @@
     <script>
         /**
          * ============================================================================
-         * 1. ARCHITECTURE PWA (Icônes PNG Canvas, Manifeste & Service Worker)
-         * ============================================================================
-         */
-        (function initPWA() {
-            /**
-             * Génère une icône PNG réelle via Canvas avec l'emoji ⏰ centré sur fond sombre arrondi #090d16
-             */
-            function createEmojiPngIcon(size) {
-                const canvas = document.createElement('canvas');
-                canvas.width = size;
-                canvas.height = size;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) return '';
-
-                // Fond sombre arrondi #090d16
-                const radius = Math.round(size * 0.22);
-                ctx.fillStyle = '#090d16';
-                ctx.beginPath();
-                ctx.moveTo(radius, 0);
-                ctx.lineTo(size - radius, 0);
-                ctx.quadraticCurveTo(size, 0, size, radius);
-                ctx.lineTo(size, size - radius);
-                ctx.quadraticCurveTo(size, size, size - radius, size);
-                ctx.lineTo(radius, size);
-                ctx.quadraticCurveTo(0, size, 0, size - radius);
-                ctx.lineTo(0, radius);
-                ctx.quadraticCurveTo(0, 0, radius, 0);
-                ctx.closePath();
-                ctx.fill();
-
-                // Bordure subtile
-                ctx.strokeStyle = 'rgba(30, 41, 59, 0.9)';
-                ctx.lineWidth = Math.max(1, size * 0.02);
-                ctx.stroke();
-
-                // Rendu de l'emoji réveil ⏰ centré
-                ctx.font = `${Math.round(size * 0.62)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('⏰', size / 2, size / 2 + size * 0.04);
-
-                return canvas.toDataURL('image/png');
-            }
-
-            const icon64Png = createEmojiPngIcon(64);
-            const icon192Png = createEmojiPngIcon(192);
-            const icon512Png = createEmojiPngIcon(512);
-
-            if (icon64Png) {
-                document.getElementById('favicon-link').setAttribute('href', icon64Png);
-            }
-            if (icon192Png) {
-                document.getElementById('apple-icon-link').setAttribute('href', icon192Png);
-            }
-
-            // Détermination propre de start_url et scope selon le protocole
-            const isHttp = window.location.protocol === 'http:' || window.location.protocol === 'https:';
-            const baseUrl = isHttp
-                ? (window.location.origin + window.location.pathname)
-                : './';
-
-            // Manifeste Web App complet conforme aux critères d'installabilité Chromium
-            const manifest = {
-                name: 'Minuteur',
-                short_name: 'Minuteur',
-                description: 'Minuteur moderne avec thème sombre, jauge circulaire et alerte sonore.',
-                start_url: baseUrl,
-                scope: baseUrl,
-                display: 'standalone',
-                background_color: '#090d16',
-                theme_color: '#090d16',
-                orientation: 'portrait',
-                icons: [
-                    {
-                        src: icon192Png,
-                        sizes: '192x192',
-                        type: 'image/png',
-                        purpose: 'any'
-                    },
-                    {
-                        src: icon192Png,
-                        sizes: '192x192',
-                        type: 'image/png',
-                        purpose: 'maskable'
-                    },
-                    {
-                        src: icon512Png,
-                        sizes: '512x512',
-                        type: 'image/png',
-                        purpose: 'any'
-                    },
-                    {
-                        src: icon512Png,
-                        sizes: '512x512',
-                        type: 'image/png',
-                        purpose: 'maskable'
-                    }
-                ]
-            };
-
-            try {
-                const manifestDataUrl = 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest));
-                document.getElementById('pwa-manifest').setAttribute('href', manifestDataUrl);
-            } catch (err) {
-                console.warn('Impossible de créer le manifeste :', err);
-            }
-
-            // Enregistrement du Service Worker hors-ligne (requis par Chromium pour l'installation PWA)
-            const pwaStatusEl = document.getElementById('pwa-status');
-            if ('serviceWorker' in navigator && isHttp) {
-                const swCode = `
-                    const CACHE_NAME = 'minuteur-pwa-v2';
-                    self.addEventListener('install', (event) => {
-                        self.skipWaiting();
-                    });
-                    self.addEventListener('activate', (event) => {
-                        event.waitUntil(self.clients.claim());
-                    });
-                    self.addEventListener('fetch', (event) => {
-                        if (event.request.method !== 'GET') return;
-                        event.respondWith(
-                            fetch(event.request)
-                                .then((response) => {
-                                    const copy = response.clone();
-                                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy)).catch(() => {});
-                                    return response;
-                                })
-                                .catch(() => caches.match(event.request))
-                        );
-                    });
-                `;
-                try {
-                    const swBlob = new Blob([swCode], { type: 'application/javascript' });
-                    const swUrl = URL.createObjectURL(swBlob);
-                    navigator.serviceWorker.register(swUrl)
-                        .then(() => {
-                            pwaStatusEl.textContent = 'PWA Active • Prêt hors-ligne';
-                        })
-                        .catch(() => {
-                            pwaStatusEl.textContent = 'Mode Web • Prêt';
-                        });
-                } catch (e) {
-                    pwaStatusEl.textContent = 'Mode Web • Prêt';
-                }
-            } else {
-                pwaStatusEl.textContent = 'Mode Web • Prêt';
-            }
-        })();
-
-        /**
-         * ============================================================================
-         * 2. SYNTHÉTISEUR AUDIO WEB AUDIO API (Bip électronique 880 Hz)
+         * 2. SYNTHÉTISEUR AUDIO WEB AUDIO API (Synchronisé avec l'état réel du navigateur)
          * ============================================================================
          */
         class Beeper {
-            constructor() {
+            constructor(onStateChangeCallback = null) {
                 this.ctx = null;
-                this.muted = false;
+                this.soundEnabled = true;
                 this.alarmInterval = null;
+                this.onStateChangeCallback = onStateChangeCallback;
+                this.initContext();
             }
 
-            unlock() {
+            /**
+             * Initialise l'AudioContext dès le démarrage et écoute ses changements d'état
+             */
+            initContext() {
                 if (!this.ctx) {
                     const AudioCtx = window.AudioContext || window.webkitAudioContext;
                     if (AudioCtx) {
                         this.ctx = new AudioCtx();
+                        this.ctx.onstatechange = () => {
+                            if (this.onStateChangeCallback) {
+                                this.onStateChangeCallback(this.getAudioStatus());
+                            }
+                        };
                     }
                 }
-                if (this.ctx && this.ctx.state === 'suspended') {
-                    this.ctx.resume();
+                if (this.ctx && this.ctx.state === 'suspended' && this.soundEnabled) {
+                    this.ctx.resume().catch(() => {
+                        if (this.onStateChangeCallback) {
+                            this.onStateChangeCallback(this.getAudioStatus());
+                        }
+                    });
+                }
+                if (this.onStateChangeCallback) {
+                    this.onStateChangeCallback(this.getAudioStatus());
                 }
             }
 
-            playBeep(frequency = 880, duration = 0.16) {
-                if (this.muted) return;
-                this.unlock();
-                if (!this.ctx) return;
+            /**
+             * Retourne l'état audio exact : 'muted', 'ready' ou 'pending'
+             */
+            getAudioStatus() {
+                if (!this.soundEnabled) return 'muted';
+                if (this.ctx && this.ctx.state === 'running') return 'ready';
+                return 'pending';
+            }
+
+            /**
+             * Débloque l'AudioContext lors d'un geste utilisateur
+             */
+            async unlock() {
+                this.initContext();
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    try {
+                        await this.ctx.resume();
+                    } catch (e) {
+                        // En attente d'une interaction directe autorisée
+                    }
+                }
+                if (this.onStateChangeCallback) {
+                    this.onStateChangeCallback(this.getAudioStatus());
+                }
+            }
+
+            async playBeep(frequency = 880, duration = 0.16) {
+                if (!this.soundEnabled) return;
+                await this.unlock();
+                if (!this.ctx || this.ctx.state !== 'running') return;
 
                 try {
                     const now = this.ctx.currentTime;
@@ -611,8 +503,6 @@
          * ============================================================================
          */
         document.addEventListener('DOMContentLoaded', () => {
-            const beeper = new Beeper();
-
             // Éléments DOM
             const appBody = document.getElementById('app-body');
             const appCard = document.getElementById('app-card');
@@ -638,6 +528,7 @@
             const soundToggleBtn = document.getElementById('sound-toggle-btn');
             const iconSoundOn = document.getElementById('icon-sound-on');
             const iconSoundOff = document.getElementById('icon-sound-off');
+            const soundPendingDot = document.getElementById('sound-pending-dot');
 
             // Modale d'édition
             const editModal = document.getElementById('edit-modal');
@@ -646,7 +537,64 @@
             const modalCancel = document.getElementById('modal-cancel');
             const modalConfirm = document.getElementById('modal-confirm');
 
+            /**
+             * Synchronise l'icône haut-parleur avec l'état réel de l'AudioContext
+             */
+            function updateSoundIconUI(status) {
+                if (status === 'muted') {
+                    iconSoundOn.classList.add('hidden');
+                    iconSoundOff.classList.remove('hidden');
+                    soundPendingDot.classList.add('hidden');
+                    soundToggleBtn.className = 'relative p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/90 border border-slate-700/80 text-slate-400 transition-all';
+                    soundToggleBtn.title = 'Son coupé — Cliquer pour activer';
+                } else if (status === 'ready') {
+                    iconSoundOn.classList.remove('hidden');
+                    iconSoundOn.className = 'w-4 h-4 text-cyan-400 transition-colors';
+                    iconSoundOff.classList.add('hidden');
+                    soundPendingDot.classList.add('hidden');
+                    soundToggleBtn.className = 'relative p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/90 border border-slate-700/80 text-slate-200 transition-all';
+                    soundToggleBtn.title = 'Son activé — Cliquer pour couper';
+                } else {
+                    // État 'pending' : soundEnabled === true mais AudioContext suspendu par le navigateur
+                    iconSoundOn.classList.remove('hidden');
+                    iconSoundOn.className = 'w-4 h-4 text-amber-400 transition-colors';
+                    iconSoundOff.classList.add('hidden');
+                    soundPendingDot.classList.remove('hidden');
+                    soundToggleBtn.className = 'relative p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/90 border border-amber-500/45 text-amber-300 transition-all';
+                    soundToggleBtn.title = 'Cliquer pour activer le son';
+                }
+            }
+
+            const beeper = new Beeper(updateSoundIconUI);
+
+            /**
+             * Débloque automatiquement l'AudioContext dès la première interaction sur un document
+             */
+            function bindAudioUnlockEvents(targetDoc) {
+                if (!targetDoc) return;
+                const handleFirstGesture = () => {
+                    if (beeper.soundEnabled && beeper.getAudioStatus() !== 'ready') {
+                        beeper.unlock();
+                    }
+                };
+                targetDoc.addEventListener('pointerdown', handleFirstGesture, { passive: true });
+                targetDoc.addEventListener('keydown', handleFirstGesture, { passive: true });
+                targetDoc.addEventListener('click', handleFirstGesture, { passive: true });
+            }
+
+            bindAudioUnlockEvents(document);
+
             let pipWindow = null;
+
+            /**
+             * Synchronise l'animation de clignotement d'alerte vers la fenêtre PiP si ouverte
+             */
+            function syncAlarmClassToPip() {
+                if (pipWindow && !pipWindow.closed && isFinished) {
+                    pipWindow.document.body.classList.add('alarm-active-bg');
+                    appCard.classList.add('alarm-active-bg');
+                }
+            }
 
             /**
              * Ouvre ou ferme la mini-fenêtre flottante Document Picture-in-Picture (275x310px)
@@ -693,6 +641,9 @@
                         // Déplacement en direct de #app-card et de la modale dans la fenêtre PiP
                         pipWindow.document.body.appendChild(appCard);
                         pipWindow.document.body.appendChild(editModal);
+
+                        // Déblocage audio également sur toute interaction dans la fenêtre PiP
+                        bindAudioUnlockEvents(pipWindow.document);
 
                         // Forcer l'ajustement exact aux dimensions lisibles juste après l'injection
                         try {
@@ -752,86 +703,6 @@
                 iconPipEnter.classList.remove('hidden');
                 iconPipExit.classList.add('hidden');
                 pipToggleBtn.classList.remove('border-cyan-500/50');
-            }
-
-            /**
-             * Ouvre ou ferme la mini-fenêtre flottante Document Picture-in-Picture (235x245px)
-             */
-            async function toggleDocumentPiP() {
-                if (pipWindow && !pipWindow.closed) {
-                    restoreFromPip();
-                    return;
-                }
-
-                if ('documentPictureInPicture' in window) {
-                    try {
-                        pipWindow = await window.documentPictureInPicture.requestWindow({
-                            width: 235,
-                            height: 245,
-                        });
-
-                        // Injection de toutes les règles CSS et styles Tailwind dans la fenêtre PiP
-                        [...document.styleSheets].forEach((styleSheet) => {
-                            try {
-                                const cssRules = [...styleSheet.cssRules].map((rule) => rule.cssText).join('');
-                                const style = document.createElement('style');
-                                style.textContent = cssRules;
-                                pipWindow.document.head.appendChild(style);
-                            } catch (e) {
-                                if (styleSheet.href) {
-                                    const link = document.createElement('link');
-                                    link.rel = 'stylesheet';
-                                    link.href = styleSheet.href;
-                                    pipWindow.document.head.appendChild(link);
-                                }
-                            }
-                        });
-
-                        document.querySelectorAll('style').forEach((styleEl) => {
-                            pipWindow.document.head.appendChild(styleEl.cloneNode(true));
-                        });
-
-                        // Activation du mode plein cadre sans espace vide (html.is-pip)
-                        pipWindow.document.documentElement.className = 'dark is-pip';
-                        pipWindow.document.body.className = 'bg-[#0b0f19] text-slate-50 transition-colors duration-300 overflow-hidden m-0 p-0';
-                        pipWindow.document.title = 'Minuteur ⏰';
-
-                        // Déplacement en direct de #app-card et de la modale dans la fenêtre PiP
-                        pipWindow.document.body.appendChild(appCard);
-                        pipWindow.document.body.appendChild(editModal);
-
-                        // Forcer l'ajustement exact aux dimensions minimales juste après l'injection
-                        try {
-                            pipWindow.resizeTo(235, 245);
-                            requestAnimationFrame(() => {
-                                try {
-                                    pipWindow.resizeTo(235, 245);
-                                } catch (e) {}
-                            });
-                        } catch (e) {}
-
-                        // Mise à jour des boutons et de l'état de la fenêtre parente
-                        pipPlaceholder.classList.remove('hidden');
-                        pipPlaceholder.classList.add('flex');
-                        iconPipEnter.classList.add('hidden');
-                        iconPipExit.classList.remove('hidden');
-                        pipToggleBtn.classList.add('border-cyan-500/50');
-                        syncAlarmClassToPip();
-
-                        // Raccourcis clavier également actifs dans la fenêtre PiP
-                        pipWindow.addEventListener('keydown', handleGlobalKeydown);
-
-                        // Rapatriement automatique à la fermeture
-                        pipWindow.addEventListener('pagehide', () => {
-                            restoreFromPip();
-                        });
-                    } catch (err) {
-                        console.warn('Échec ouverture Document PiP, repli popup :', err);
-                        window.open(location.href, 'MinuteurMini', 'width=235,height=245,menubar=no,toolbar=no,location=no,status=no');
-                    }
-                } else {
-                    window.open(location.href, 'MinuteurMini', 'width=235,height=245,menubar=no,toolbar=no,location=no,status=no');
-                }
             }
 
             pipToggleBtn.addEventListener('click', toggleDocumentPiP);
@@ -1051,24 +922,24 @@
                         remainingMs = nextMs;
                         statusBadge.textContent = 'Prêt';
                         statusBadge.className = 'text-xs font-semibold uppercase tracking-wider text-slate-300 mb-0.5';
-                    }
+            soundToggleBtn.addEventListener('click', async () => {
+                const currentStatus = beeper.getAudioStatus();
 
-                    const exactMinutes = remainingMs % 60000 === 0 ? remainingMs / 60000 : null;
-                    highlightPreset([1, 2, 5, 10, 15].includes(exactMinutes) ? exactMinutes : null);
-                    updateVisuals();
-                });
-            });
-
-            soundToggleBtn.addEventListener('click', () => {
-                beeper.muted = !beeper.muted;
-                if (beeper.muted) {
+                if (currentStatus === 'pending') {
+                    // Son activé mais bloqué par le navigateur : on le débloque et on confirme par un bip
+                    beeper.soundEnabled = true;
+                    await beeper.unlock();
+                    beeper.playBeep(880, 0.08);
+                } else if (currentStatus === 'ready') {
+                    // Son actif et prêt : on coupe le son
+                    beeper.soundEnabled = false;
                     beeper.stopAlarm();
-                    iconSoundOn.classList.add('hidden');
-                    iconSoundOff.classList.remove('hidden');
+                    updateSoundIconUI('muted');
                 } else {
-                    iconSoundOn.classList.remove('hidden');
-                    iconSoundOff.classList.add('hidden');
-                    beeper.playBeep(880, 0.1);
+                    // Son coupé ('muted') : on le réactive, on débloque l'AudioContext et on joue un bip
+                    beeper.soundEnabled = true;
+                    await beeper.unlock();
+                    beeper.playBeep(880, 0.08);
                 }
             });
 
