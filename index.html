@@ -244,7 +244,7 @@
                     />
                     <!-- Graduations subtiles (12 repères) -->
                     <g id="dial-ticks" stroke="#334155" stroke-width="1.5" stroke-linecap="round"></g>
-                    <!-- Anneau de progression dynamique -->
+                    <!-- Anneau de progression dynamique (masqué tant que non démarré) -->
                     <circle 
                         id="progress-ring" 
                         cx="80" 
@@ -256,7 +256,8 @@
                         stroke-linecap="round"
                         transform="rotate(-90 80 80)"
                         stroke-dasharray="439.823"
-                        stroke-dashoffset="0"
+                        stroke-dashoffset="439.823"
+                        style="opacity: 0;"
                     />
                 </svg>
 
@@ -818,7 +819,7 @@
             const RADIUS = 70;
             const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
             progressRing.style.strokeDasharray = `${CIRCUMFERENCE.toFixed(3)}`;
-            progressRing.style.strokeDashoffset = '0';
+            progressRing.style.strokeDashoffset = `${CIRCUMFERENCE.toFixed(3)}`;
 
             // Dessin des 12 repères horaires autour du cadran
             for (let i = 0; i < 12; i++) {
@@ -840,6 +841,7 @@
             let remainingMs = initialDurationMs;
             let endTimeTimestamp = null;
             let isRunning = false;
+            let isStarted = false;
             let isFinished = false;
             let rafId = null;
 
@@ -862,6 +864,15 @@
                     document.title = `Minuteur — PWA`;
                 }
 
+                // Si le minuteur n'a pas été démarré ou vient d'être réinitialisé, masquer l'anneau coloré
+                if (!isStarted && !isFinished) {
+                    progressRing.style.strokeDashoffset = `${CIRCUMFERENCE.toFixed(3)}`;
+                    progressRing.style.opacity = '0';
+                    glowBackdrop.className = 'absolute inset-2 rounded-full bg-slate-800/10 blur-md transition-colors duration-500 pointer-events-none';
+                    return;
+                }
+
+                progressRing.style.opacity = '1';
                 const ratio = initialDurationMs > 0 ? Math.max(0, Math.min(1, remainingMs / initialDurationMs)) : 0;
                 const offset = CIRCUMFERENCE * (1 - ratio);
                 progressRing.style.strokeDashoffset = offset.toFixed(3);
@@ -905,6 +916,7 @@
 
             function triggerAlarm() {
                 isRunning = false;
+                isStarted = false;
                 isFinished = true;
                 remainingMs = 0;
                 if (rafId) cancelAnimationFrame(rafId);
@@ -945,9 +957,11 @@
                 if (isRunning || remainingMs <= 0) return;
 
                 isRunning = true;
+                isStarted = true;
                 endTimeTimestamp = performance.now() + remainingMs;
 
                 statusBadge.classList.add('hidden');
+                updateVisuals();
 
                 rafId = requestAnimationFrame(tick);
             }
@@ -955,6 +969,7 @@
             function stopTimer() {
                 if (isFinished) {
                     clearAlarmState();
+                    isStarted = false;
                     statusBadge.classList.add('hidden');
                     updateVisuals();
                     return;
@@ -973,6 +988,7 @@
 
             function resetTimer() {
                 isRunning = false;
+                isStarted = false;
                 if (rafId) cancelAnimationFrame(rafId);
                 clearAlarmState();
 
@@ -984,6 +1000,7 @@
             function setDuration(ms, matchedPresetMinutes = null) {
                 beeper.unlock();
                 isRunning = false;
+                isStarted = false;
                 if (rafId) cancelAnimationFrame(rafId);
                 clearAlarmState();
 
